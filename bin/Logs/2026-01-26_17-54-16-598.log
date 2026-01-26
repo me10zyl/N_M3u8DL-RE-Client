@@ -1,0 +1,23 @@
+﻿LOG 2026/01/26
+Save Path: C:\itaojingit\MyMediago\bin\Logs
+Task Start: 2026/01/26 17:54:16
+Task CommandLine: C:\itaojingit\MyMediago\bin\N_m3u8DL-RE.exe https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.mp4/.m3u8 --save-dir C:\itaojingit\MyMediago\tmp\qoinaidex --save-name qoinaidex_第一集
+
+17:54:16.599 INFO : N_m3u8DL-RE (Beta version) 20251029
+17:54:16.600 EXTRA: ffmpeg => C:\itaojingit\MyMediago\bin\ffmpeg.exe
+17:54:16.600 INFO : 加载URL: https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.mp4/.m3u8
+17:54:18.706 INFO : 内容匹配: HTTP Live Streaming
+17:54:18.708 INFO : 正在解析媒体信息...
+17:54:18.708 WARN : 检测到Master列表，开始解析全部流信息
+17:54:18.712 WARN : 写出meta json
+17:54:18.713 INFO : 已解析, 共计 10 条媒体流, 基本流 10 条, 可选音频流 0 条, 可选字幕流 0 条
+17:54:18.714 INFO : Vid 1680x750 | 2468 Kbps | 24 | mp4a.40.2,avc1.100.40 | SDR
+17:54:18.714 INFO : Vid 3360x1500 | 1814 Kbps | 24 | mp4a.40.2,hvc1.1.6.L150.90 | SDR
+17:54:18.715 INFO : Vid 1680x750 | 1727 Kbps | 24 | mp4a.40.2,avc1.100.40 | SDR
+17:54:18.715 INFO : Vid 2576x1150 | 1367 Kbps | 24 | mp4a.40.2,hvc1.1.6.L150.90 | SDR
+17:54:18.716 INFO : Vid 784x350 | 1197 Kbps | 24 | mp4a.40.2,avc1.77.31
+17:54:18.716 INFO : Vid 1680x750 | 1024 Kbps | 24 | mp4a.40.2,hvc1.1.6.L150.90 | SDR
+17:54:18.717 INFO : Vid 448x200 | 932 Kbps | 24 | mp4a.40.2,avc1.66.30
+17:54:18.717 INFO : Vid 224x100 | 493 Kbps | 24 | mp4a.40.2,avc1.66.30
+17:54:18.717 INFO : Vid 136 Kbps | mp4a.40.2
+17:54:18.718 INFO : Vid 68 Kbps | mp4a.40.2

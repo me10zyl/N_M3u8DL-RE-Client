@@ -1,0 +1,8 @@
+﻿LOG 2026/01/26
+Save Path: C:\itaojingit\MyMediago\bin\Logs
+Task Start: 2026/01/26 18:11:51
+Task CommandLine: C:\itaojingit\MyMediago\bin\N_m3u8DL-RE.exe https://cph-pms.akamaized.net/hls/live/2000341/test/master.m3u8 --save-dir C:\itaojingit\MyMediago\tmp\qoinaidex --save-name qoinaidex_第二集 --auto-select
+
+18:11:51.114 INFO : N_m3u8DL-RE (Beta version) 20251029
+18:11:51.115 EXTRA: ffmpeg => C:\itaojingit\MyMediago\bin\ffmpeg.exe
+18:11:51.115 INFO : 加载URL: https://cph-pms.akamaized.net/hls/live/2000341/test/master.m3u8

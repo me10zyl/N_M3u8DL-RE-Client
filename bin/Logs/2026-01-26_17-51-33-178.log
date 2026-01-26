@@ -1,0 +1,8 @@
+﻿LOG 2026/01/26
+Save Path: C:\itaojingit\MyMediago\bin\Logs
+Task Start: 2026/01/26 17:51:33
+Task CommandLine: C:\itaojingit\MyMediago\bin\N_m3u8DL-RE.exe https://vip.ffzy-online3.com/20251127/39761_082e8c0e/index.m3u8 --save-dir C:\itaojingit\MyMediago\tmp\qoinaidex --save-name qoinaidex_第09集
+
+17:51:33.178 INFO : N_m3u8DL-RE (Beta version) 20251029
+17:51:33.179 EXTRA: ffmpeg => C:\itaojingit\MyMediago\bin\ffmpeg.exe
+17:51:33.179 INFO : 加载URL: https://vip.ffzy-online3.com/20251127/39761_082e8c0e/index.m3u8

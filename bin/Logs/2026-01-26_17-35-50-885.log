@@ -1,0 +1,12 @@
+﻿LOG 2026/01/26
+Save Path: C:\itaojingit\MyMediago\bin\Logs
+Task Start: 2026/01/26 17:35:50
+Task CommandLine: C:\itaojingit\MyMediago\bin\N_m3u8DL-RE.exe https://vip.ffzy-online3.com/20251106/39091_84532fb3/index.m3u8 --save-dir C:\tmp\qoinaidex --save-name qoinaidex_第01集
+
+17:35:50.885 INFO : N_m3u8DL-RE (Beta version) 20251029
+17:35:50.887 EXTRA: ffmpeg => C:\itaojingit\MyMediago\bin\ffmpeg.exe
+17:35:50.887 INFO : 加载URL: https://vip.ffzy-online3.com/20251106/39091_84532fb3/index.m3u8
+17:35:52.841 WARN : Response status code does not indicate success: 403 (Forbidden). (1/10)
+17:35:54.349 INFO : 加载URL: https://vip.ffzy-online3.com/20251106/39091_84532fb3/index.m3u8
+17:35:56.288 WARN : Response status code does not indicate success: 403 (Forbidden). (2/10)
+17:35:57.792 INFO : 加载URL: https://vip.ffzy-online3.com/20251106/39091_84532fb3/index.m3u8

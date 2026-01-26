@@ -1,0 +1,27 @@
+﻿LOG 2026/01/26
+Save Path: C:\itaojingit\MyMediago\bin\Logs
+Task Start: 2026/01/26 17:15:05
+Task CommandLine: C:\itaojingit\MyMediago\bin\N_m3u8DL-RE.exe https://vip.ffzy-online3.com/20251113/39333_5c76231e/index.m3u8 --save-dir C:\tmp\qoinaidex --save-name qoinaidex_第05集
+
+17:15:05.332 INFO : N_m3u8DL-RE (Beta version) 20251029
+17:15:05.334 EXTRA: ffmpeg => C:\itaojingit\MyMediago\bin\ffmpeg.exe
+17:15:05.334 INFO : 加载URL: https://vip.ffzy-online3.com/20251113/39333_5c76231e/index.m3u8
+17:15:07.457 WARN : Response status code does not indicate success: 403 (Forbidden). (1/10)
+17:15:08.968 INFO : 加载URL: https://vip.ffzy-online3.com/20251113/39333_5c76231e/index.m3u8
+17:15:11.194 WARN : Response status code does not indicate success: 403 (Forbidden). (2/10)
+17:15:12.700 INFO : 加载URL: https://vip.ffzy-online3.com/20251113/39333_5c76231e/index.m3u8
+17:15:14.601 WARN : Response status code does not indicate success: 403 (Forbidden). (3/10)
+17:15:16.103 INFO : 加载URL: https://vip.ffzy-online3.com/20251113/39333_5c76231e/index.m3u8
+17:15:18.075 WARN : Response status code does not indicate success: 403 (Forbidden). (4/10)
+17:15:19.582 INFO : 加载URL: https://vip.ffzy-online3.com/20251113/39333_5c76231e/index.m3u8
+17:15:21.497 WARN : Response status code does not indicate success: 403 (Forbidden). (5/10)
+17:15:23.010 INFO : 加载URL: https://vip.ffzy-online3.com/20251113/39333_5c76231e/index.m3u8
+17:15:24.894 WARN : Response status code does not indicate success: 403 (Forbidden). (6/10)
+17:15:26.408 INFO : 加载URL: https://vip.ffzy-online3.com/20251113/39333_5c76231e/index.m3u8
+17:15:28.334 WARN : Response status code does not indicate success: 403 (Forbidden). (7/10)
+17:15:29.845 INFO : 加载URL: https://vip.ffzy-online3.com/20251113/39333_5c76231e/index.m3u8
+17:15:31.766 WARN : Response status code does not indicate success: 403 (Forbidden). (8/10)
+17:15:33.271 INFO : 加载URL: https://vip.ffzy-online3.com/20251113/39333_5c76231e/index.m3u8
+17:15:35.458 WARN : Response status code does not indicate success: 403 (Forbidden). (9/10)
+17:15:36.959 INFO : 加载URL: https://vip.ffzy-online3.com/20251113/39333_5c76231e/index.m3u8
+17:15:38.882 WARN : Response status code does not indicate success: 403 (Forbidden). (10/10)

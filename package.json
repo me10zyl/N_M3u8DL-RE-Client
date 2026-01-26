@@ -1,0 +1,16 @@
+{
+  "name": "n-m3u8dl-re-client",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^30.0.0"
+  },
+  "dependencies": {
+    "iconv-lite": "^0.6.3"
+  }
+}

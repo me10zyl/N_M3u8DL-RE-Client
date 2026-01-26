@@ -1,0 +1,21 @@
+﻿LOG 2026/01/26
+Save Path: C:\itaojingit\MyMediago\bin\Logs
+Task Start: 2026/01/26 18:04:59
+Task CommandLine: C:\itaojingit\MyMediago\bin\N_m3u8DL-RE.exe https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8、 --save-dir C:\itaojingit\MyMediago\tmp\qoinaidex --save-name qoinaidex_第一集 --auto-select
+
+18:04:59.936 INFO : N_m3u8DL-RE (Beta version) 20251029
+18:04:59.937 EXTRA: ffmpeg => C:\itaojingit\MyMediago\bin\ffmpeg.exe
+18:04:59.937 INFO : 加载URL: https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8、
+18:05:01.127 WARN : Response status code does not indicate success: 404 (Not Found). (1/10)
+18:05:02.638 INFO : 加载URL: https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8、
+18:05:03.101 WARN : Response status code does not indicate success: 404 (Not Found). (2/10)
+18:05:04.615 INFO : 加载URL: https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8、
+18:05:05.841 WARN : Response status code does not indicate success: 404 (Not Found). (3/10)
+18:05:07.351 INFO : 加载URL: https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8、
+18:05:07.795 WARN : Response status code does not indicate success: 404 (Not Found). (4/10)
+18:05:09.307 INFO : 加载URL: https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8、
+18:05:09.761 WARN : Response status code does not indicate success: 404 (Not Found). (5/10)
+18:05:11.266 INFO : 加载URL: https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8、
+18:05:11.716 WARN : Response status code does not indicate success: 404 (Not Found). (6/10)
+18:05:13.225 INFO : 加载URL: https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8、
+18:05:13.663 WARN : Response status code does not indicate success: 404 (Not Found). (7/10)

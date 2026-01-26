@@ -1,0 +1,15 @@
+﻿LOG 2026/01/26
+Save Path: C:\itaojingit\MyMediago\bin\Logs
+Task Start: 2026/01/26 17:56:45
+Task CommandLine: C:\itaojingit\MyMediago\bin\N_m3u8DL-RE.exe http://playertest.longtailvideo.com/adaptive/wowzaid3/playlist.m3u8 --save-dir C:\itaojingit\MyMediago\tmp\qoinaidex --save-name qoinaidex_第一集
+
+17:56:45.943 INFO : N_m3u8DL-RE (Beta version) 20251029
+17:56:45.944 EXTRA: ffmpeg => C:\itaojingit\MyMediago\bin\ffmpeg.exe
+17:56:45.944 INFO : 加载URL: http://playertest.longtailvideo.com/adaptive/wowzaid3/playlist.m3u8
+17:56:46.351 INFO : 内容匹配: HTTP Live Streaming
+17:56:46.352 INFO : 正在解析媒体信息...
+17:56:46.352 WARN : 检测到Master列表，开始解析全部流信息
+17:56:46.356 WARN : 写出meta json
+17:56:46.357 INFO : 已解析, 共计 1 条媒体流, 基本流 1 条, 可选音频流 0 条, 可选字幕流 0 条
+17:56:46.358 INFO : Vid 426x240 | 538 Kbps | avc1.77.21,mp4a.40.2
+17:56:46.359 INFO : 正在解析媒体信息...

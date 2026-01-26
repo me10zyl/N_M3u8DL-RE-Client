@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>N_m3u8DL-RE 客户端</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <div>
+          <h1>N_m3u8DL-RE 客户端</h1>
+          <p>批量下载 m3u8，临时目录下载后移动到最终目录</p>
+        </div>
+        <div class="tab-actions">
+          <button id="tabMain" class="btn tab active">下载</button>
+          <button id="tabSettings" class="btn tab">设置</button>
+        </div>
+      </header>
+
+      <section id="mainView">
+        <section class="card">
+          <div class="grid">
+            <label class="field">
+              <span>电视剧名称</span>
+              <input id="showName" placeholder="例如：某某电视剧" />
+            </label>
+            <label class="field">
+              <span>最终目录</span>
+              <div class="row">
+                <input id="finalRoot" placeholder="输出最终根目录" />
+                <button id="pickFinal" class="btn">选择</button>
+              </div>
+            </label>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="field">
+            <span>批量链接（每行：第01集$https://url.m3u8）</span>
+            <textarea id="batchInput" rows="8" placeholder="第01集$https://url.m3u8"></textarea>
+          </div>
+          <div class="batch-actions">
+            <button id="selectAll" class="btn">全选</button>
+            <button id="selectNone" class="btn">全不选</button>
+            <span id="batchStatus" class="status"></span>
+          </div>
+          <div id="batchList" class="batch-list"></div>
+          <div class="actions">
+            <button id="startBtn" class="btn primary">开始下载</button>
+            <button id="cancelBtn" class="btn danger">停止当前任务</button>
+            <button id="stopAllBtn" class="btn danger">停止所有任务</button>
+            <span id="status" class="status"></span>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>任务列表</h2>
+          <div id="taskList" class="task-list"></div>
+        </section>
+
+        <section class="card">
+          <h2>日志</h2>
+          <pre id="log" class="log"></pre>
+        </section>
+      </section>
+
+      <section id="settingsView" class="hidden">
+        <section class="card">
+          <h2>下载设置</h2>
+          <div class="grid">
+            <label class="field">
+              <span>N_m3u8DL-RE 程序路径</span>
+              <div class="row">
+                <input id="exePath" placeholder="选择 N_m3u8DL-RE.exe" />
+                <button id="pickExe" class="btn">选择</button>
+              </div>
+            </label>
+            <label class="field">
+              <span>临时目录</span>
+              <div class="row">
+                <input id="tempRoot" placeholder="下载临时根目录" />
+                <button id="pickTemp" class="btn">选择</button>
+              </div>
+            </label>
+          </div>
+        </section>
+      </section>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

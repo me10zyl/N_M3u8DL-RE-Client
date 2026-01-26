@@ -1,0 +1,27 @@
+﻿LOG 2026/01/26
+Save Path: C:\itaojingit\MyMediago\bin\Logs
+Task Start: 2026/01/26 18:08:14
+Task CommandLine: C:\itaojingit\MyMediago\bin\N_m3u8DL-RE.exe https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8 --save-dir C:\itaojingit\MyMediago\tmp\qoinaidex --save-name qoinaidex_第一集 --auto-select
+
+18:08:14.107 INFO : N_m3u8DL-RE (Beta version) 20251029
+18:08:14.108 EXTRA: ffmpeg => C:\itaojingit\MyMediago\bin\ffmpeg.exe
+18:08:14.109 INFO : 加载URL: https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
+18:08:14.741 INFO : 内容匹配: HTTP Live Streaming
+18:08:14.741 INFO : 正在解析媒体信息...
+18:08:14.742 WARN : 检测到Master列表，开始解析全部流信息
+18:08:14.746 WARN : 写出meta json
+18:08:14.747 INFO : 已解析, 共计 5 条媒体流, 基本流 5 条, 可选音频流 0 条, 可选字幕流 0 条
+18:08:14.748 INFO : Vid 1920x1080 | 6221 Kbps | mp4a.40.2,avc1.640028
+18:08:14.748 INFO : Vid 1280x720 | 2149 Kbps | mp4a.40.2,avc1.64001f
+18:08:14.749 INFO : Vid 848x480 | 836 Kbps | mp4a.40.2,avc1.64001f
+18:08:14.749 INFO : Vid 512x288 | 460 Kbps | mp4a.40.5,avc1.420016
+18:08:14.750 INFO : Vid 320x184 | 246 Kbps | mp4a.40.5,avc1.42000d
+18:08:14.750 INFO : 正在解析媒体信息...
+18:08:14.850 INFO : 已选择的流:
+18:08:14.851 INFO : Vid 1920x1080 | 6221 Kbps | mp4a.40.2,avc1.640028 | 64 Segments | ~10m34s
+18:08:14.851 WARN : 写出meta json
+18:08:14.852 INFO : 保存文件名: qoinaidex_第一集
+18:08:14.857 INFO : 开始下载...Vid 1920x1080 | 6221 Kbps | mp4a.40.2,avc1.640028
+18:08:14.861 WARN : 读取媒体信息...
+18:08:14.907 INFO : [0x101]: Audio, aac (LC) ([15][0][0][0]), 153 kb/s
+18:08:14.908 INFO : [0x102]: Video, h264 (High) ([27][0][0][0]), 1920x1080, 60 fps
