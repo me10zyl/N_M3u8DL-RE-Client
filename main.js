@@ -196,6 +196,8 @@ async function runNext() {
 
   const args = [
     task.url,
+    "--tmp-dir",
+    task.tempShowDir,
     "--save-dir",
     task.tempShowDir,
     "--save-name",
