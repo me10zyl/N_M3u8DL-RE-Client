@@ -17,20 +17,34 @@ function getConfigPath() {
 function readConfig() {
   const configPath = getConfigPath();
   const defaultExe = path.join(app.getAppPath(), "bin", "N_m3u8DL-RE.exe");
+  const fallbackExe = path.join(process.resourcesPath, "bin", "N_m3u8DL-RE.exe");
   const defaultTempRoot = path.join(app.getAppPath(), "tmp");
   try {
     const raw = fs.readFileSync(configPath, "utf-8");
     const parsed = JSON.parse(raw);
+    const exeCandidate = parsed.exePath || "";
+    const resolvedExe = fs.existsSync(exeCandidate)
+      ? exeCandidate
+      : fs.existsSync(defaultExe)
+      ? defaultExe
+      : fs.existsSync(fallbackExe)
+      ? fallbackExe
+      : "";
     return {
-      exePath: parsed.exePath || defaultExe,
+      exePath: resolvedExe,
       tempRoot: parsed.tempRoot || defaultTempRoot,
       finalRoot: parsed.finalRoot || "",
       showName: parsed.showName || "",
       batchInput: parsed.batchInput || ""
     };
   } catch (error) {
+    const resolvedExe = fs.existsSync(defaultExe)
+      ? defaultExe
+      : fs.existsSync(fallbackExe)
+      ? fallbackExe
+      : "";
     return {
-      exePath: defaultExe,
+      exePath: resolvedExe,
       tempRoot: defaultTempRoot,
       finalRoot: "",
       showName: "",
@@ -257,6 +271,9 @@ ipcMain.handle("tasks:start", (event, payload) => {
   finalRoot = finalRoot || storedConfig.finalRoot;
   if (!exePath || !tempRoot || !finalRoot || !normalizedShow) {
     return { ok: false, message: "Missing required settings." };
+  }
+  if (!fs.existsSync(exePath)) {
+    return { ok: false, message: "N_m3u8DL-RE.exe not found. Please set the path in Settings." };
   }
 
   const tasks = [];
