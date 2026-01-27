@@ -247,8 +247,12 @@ async function runNext() {
 }
 
 ipcMain.handle("tasks:start", (event, payload) => {
-  const { exePath, tempRoot, finalRoot, showName, items } = payload;
+  let { exePath, tempRoot, finalRoot, showName, items } = payload;
   const normalizedShow = (showName || "").trim();
+  const storedConfig = readConfig();
+  exePath = exePath || storedConfig.exePath;
+  tempRoot = tempRoot || storedConfig.tempRoot;
+  finalRoot = finalRoot || storedConfig.finalRoot;
   if (!exePath || !tempRoot || !finalRoot || !normalizedShow) {
     return { ok: false, message: "Missing required settings." };
   }
