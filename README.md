@@ -92,6 +92,10 @@ npm start
 npm run dist:win
 ```
 
+## 命令行版本
+
+[N_m3u8DL-RE](https://github.com/nilaoda/N_m3u8DL-RE)
+
 ## 免责声明
 
 请确保下载内容合法合规，作者不对任何滥用行为负责。
