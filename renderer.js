@@ -2,6 +2,7 @@ const showNameInput = document.getElementById("showName");
 const exePathInput = document.getElementById("exePath");
 const tempRootInput = document.getElementById("tempRoot");
 const finalRootInput = document.getElementById("finalRoot");
+const removeAdsInput = document.getElementById("removeAds");
 const batchInput = document.getElementById("batchInput");
 const startBtn = document.getElementById("startBtn");
 const cancelBtn = document.getElementById("cancelBtn");
@@ -20,9 +21,52 @@ const batchStatusEl = document.getElementById("batchStatus");
 const batchList = document.getElementById("batchList");
 const taskList = document.getElementById("taskList");
 const logEl = document.getElementById("log");
+const downloadPageTabs = document.getElementById("downloadPageTabs");
+const addDownloadPageBtn = document.getElementById("addDownloadPage");
 
-const taskState = new Map();
-const batchSelection = new Map();
+let appState = {
+  activePageId: "page-1",
+  pages: []
+};
+
+function createEmptyPage(index) {
+  return {
+    id: `page-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    title: `页面 ${index}`,
+    showName: "",
+    finalRoot: "",
+    batchInput: "",
+    batchSelection: {},
+    taskState: {},
+    log: ""
+  };
+}
+
+function normalizePage(page, index) {
+  return {
+    id: page.id || `page-${index + 1}`,
+    title: page.title || page.showName || `页面 ${index + 1}`,
+    showName: page.showName || "",
+    finalRoot: page.finalRoot || "",
+    batchInput: page.batchInput || "",
+    batchSelection: page.batchSelection || {},
+    taskState: page.taskState || {},
+    log: page.log || ""
+  };
+}
+
+function getActivePage() {
+  let page = appState.pages.find((item) => item.id === appState.activePageId);
+  if (!page) {
+    page = appState.pages[0];
+    appState.activePageId = page.id;
+  }
+  return page;
+}
+
+function getTaskEntries(page) {
+  return Object.entries(page.taskState || {});
+}
 
 function setStatus(message) {
   statusEl.textContent = message || "";
@@ -32,14 +76,18 @@ function setBatchStatus(message) {
   batchStatusEl.textContent = message || "";
 }
 
-function appendLog(message) {
-  logEl.textContent += message;
-  logEl.scrollTop = logEl.scrollHeight;
+function appendLogToPage(page, message) {
+  page.log = `${page.log || ""}${message || ""}`;
+  if (page.id === appState.activePageId) {
+    logEl.textContent = page.log;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
 }
 
 function renderTasks() {
+  const page = getActivePage();
   taskList.innerHTML = "";
-  for (const [id, task] of taskState.entries()) {
+  for (const [id, task] of getTaskEntries(page)) {
     const row = document.createElement("div");
     row.className = `task ${task.status || "queued"}`;
 
@@ -92,11 +140,20 @@ function formatStatus(status) {
   }
 }
 
+function getBatchSelection(page) {
+  if (!page.batchSelection) {
+    page.batchSelection = {};
+  }
+  return page.batchSelection;
+}
+
 function renderBatchList(items) {
+  const page = getActivePage();
+  const selection = getBatchSelection(page);
   batchList.innerHTML = "";
   for (const item of items) {
     const key = `${item.episodeTitle}$${item.url}`;
-    const checked = batchSelection.get(key) !== false;
+    const checked = selection[key] !== false;
 
     const row = document.createElement("label");
     row.className = "batch-item";
@@ -105,7 +162,7 @@ function renderBatchList(items) {
     checkbox.type = "checkbox";
     checkbox.checked = checked;
     checkbox.addEventListener("change", () => {
-      batchSelection.set(key, checkbox.checked);
+      selection[key] = checkbox.checked;
     });
 
     const text = document.createElement("span");
@@ -162,46 +219,130 @@ function parseBatchInput(raw) {
 }
 
 function refreshBatchPreview() {
-  const raw = batchInput.value;
-  const { items, errors } = parseBatchInput(raw);
+  const page = getActivePage();
+  page.batchInput = batchInput.value;
+  const { items, errors } = parseBatchInput(batchInput.value);
   if (errors.length) {
     setBatchStatus(errors[0]);
   } else {
     setBatchStatus("");
   }
 
+  const selection = getBatchSelection(page);
   const nextKeys = new Set(items.map((item) => `${item.episodeTitle}$${item.url}`));
-  for (const key of batchSelection.keys()) {
+  for (const key of Object.keys(selection)) {
     if (!nextKeys.has(key)) {
-      batchSelection.delete(key);
+      delete selection[key];
     }
   }
   for (const key of nextKeys) {
-    if (!batchSelection.has(key)) {
-      batchSelection.set(key, true);
+    if (!(key in selection)) {
+      selection[key] = true;
     }
   }
 
   renderBatchList(items);
 }
 
+function syncActivePageFromDom() {
+  if (appState.pages.length === 0) {
+    return;
+  }
+  const page = getActivePage();
+  page.showName = showNameInput.value.trim();
+  page.finalRoot = finalRootInput.value.trim();
+  page.batchInput = batchInput.value;
+  page.log = logEl.textContent;
+  page.title = page.showName || page.title || "页面";
+}
+
+function loadActivePageToDom() {
+  const page = getActivePage();
+  showNameInput.value = page.showName || "";
+  finalRootInput.value = page.finalRoot || "";
+  batchInput.value = page.batchInput || "";
+  logEl.textContent = page.log || "";
+  logEl.scrollTop = logEl.scrollHeight;
+  refreshBatchPreview();
+  renderTasks();
+  setStatus("");
+}
+
+function renderDownloadPageTabs() {
+  downloadPageTabs.innerHTML = "";
+  for (const page of appState.pages) {
+    const tab = document.createElement("button");
+    tab.className = `download-page-tab${page.id === appState.activePageId ? " active" : ""}`;
+    tab.textContent = page.showName || page.title || "页面";
+    tab.addEventListener("click", () => {
+      if (page.id === appState.activePageId) {
+        return;
+      }
+      syncActivePageFromDom();
+      appState.activePageId = page.id;
+      loadActivePageToDom();
+      renderDownloadPageTabs();
+      saveConfig();
+    });
+    downloadPageTabs.appendChild(tab);
+  }
+}
+
+function createDownloadPage() {
+  syncActivePageFromDom();
+  const page = createEmptyPage(appState.pages.length + 1);
+  appState.pages.push(page);
+  appState.activePageId = page.id;
+  loadActivePageToDom();
+  renderDownloadPageTabs();
+  saveConfig();
+}
+
 async function loadConfig() {
   const config = await window.api.getConfig();
-  showNameInput.value = config.showName || "";
+  const pages = Array.isArray(config.pages) && config.pages.length > 0
+    ? config.pages
+    : [{
+      id: "page-1",
+      title: config.showName || "页面 1",
+      showName: config.showName || "",
+      finalRoot: config.finalRoot || "",
+      batchInput: config.batchInput || ""
+    }];
+
+  appState = {
+    activePageId: config.activePageId || pages[0].id,
+    pages: pages.map(normalizePage)
+  };
+  if (!appState.pages.some((page) => page.id === appState.activePageId)) {
+    appState.activePageId = appState.pages[0].id;
+  }
+
   exePathInput.value = config.exePath || "";
   tempRootInput.value = config.tempRoot || "";
-  finalRootInput.value = config.finalRoot || "";
-  batchInput.value = config.batchInput || "";
-  refreshBatchPreview();
+  removeAdsInput.checked = config.removeAds !== false;
+  loadActivePageToDom();
+  renderDownloadPageTabs();
 }
 
 async function saveConfig() {
+  syncActivePageFromDom();
+  const activePage = getActivePage();
   const nextConfig = {
-    showName: showNameInput.value.trim(),
     exePath: exePathInput.value.trim(),
     tempRoot: tempRootInput.value.trim(),
-    finalRoot: finalRootInput.value.trim(),
-    batchInput: batchInput.value
+    removeAds: removeAdsInput.checked,
+    activePageId: appState.activePageId,
+    pages: appState.pages.map((page) => ({
+      id: page.id,
+      title: page.title || page.showName || "页面",
+      showName: page.showName || "",
+      finalRoot: page.finalRoot || "",
+      batchInput: page.batchInput || ""
+    })),
+    showName: activePage.showName || "",
+    finalRoot: activePage.finalRoot || "",
+    batchInput: activePage.batchInput || ""
   };
   await window.api.setConfig(nextConfig);
 }
@@ -232,6 +373,8 @@ pickFinalBtn.addEventListener("click", async () => {
 
 startBtn.addEventListener("click", async () => {
   setStatus("");
+  const page = getActivePage();
+  page.log = "";
   logEl.textContent = "";
 
   const showName = showNameInput.value.trim();
@@ -246,9 +389,10 @@ startBtn.addEventListener("click", async () => {
     return;
   }
 
+  const selection = getBatchSelection(page);
   const selectedItems = items.filter((item) => {
     const key = `${item.episodeTitle}$${item.url}`;
-    return batchSelection.get(key) !== false;
+    return selection[key] !== false;
   });
   if (selectedItems.length === 0) {
     setStatus("请先选择要下载的集数");
@@ -256,10 +400,12 @@ startBtn.addEventListener("click", async () => {
   }
 
   const response = await window.api.startTasks({
+    pageId: page.id,
     showName,
     exePath,
     tempRoot,
     finalRoot,
+    removeAds: removeAdsInput.checked,
     items: selectedItems
   });
 
@@ -268,17 +414,16 @@ startBtn.addEventListener("click", async () => {
     return;
   }
 
-  const previous = new Map(taskState);
-  taskState.clear();
+  page.taskState = {};
   for (const task of response.tasks) {
-    const existing = previous.get(task.id);
-    taskState.set(task.id, {
+    page.taskState[task.id] = {
       name: task.saveName,
-      status: existing?.status || "queued",
-      message: existing?.message || ""
-    });
+      status: "queued",
+      message: ""
+    };
   }
   renderTasks();
+  renderDownloadPageTabs();
   setStatus("已加入队列");
   saveConfig();
 });
@@ -294,46 +439,63 @@ stopAllBtn.addEventListener("click", async () => {
 
 tabMain.addEventListener("click", () => setActiveTab("main"));
 tabSettings.addEventListener("click", () => setActiveTab("settings"));
+addDownloadPageBtn.addEventListener("click", () => createDownloadPage());
 
 window.api.onTaskUpdate((event, payload) => {
+  const page = appState.pages.find((item) => item.id === payload.pageId) || getActivePage();
   if (payload.status === "log") {
-    appendLog(payload.message || "");
+    appendLogToPage(page, payload.message || "");
     return;
   }
 
-  const task = taskState.get(payload.id) || { name: payload.name || payload.id };
+  if (!page.taskState) {
+    page.taskState = {};
+  }
+  const task = page.taskState[payload.id] || { name: payload.name || payload.id };
+  if (payload.name) {
+    task.name = payload.name;
+  }
   if (payload.status) {
     task.status = payload.status;
   }
   if (payload.message) {
     task.message = payload.message;
   }
-  taskState.set(payload.id, task);
-  renderTasks();
+  page.taskState[payload.id] = task;
+  if (page.id === appState.activePageId) {
+    renderTasks();
+  }
 });
 
-showNameInput.addEventListener("input", () => saveConfig());
+showNameInput.addEventListener("input", () => {
+  syncActivePageFromDom();
+  renderDownloadPageTabs();
+  saveConfig();
+});
 exePathInput.addEventListener("input", () => saveConfig());
 tempRootInput.addEventListener("input", () => saveConfig());
 finalRootInput.addEventListener("input", () => saveConfig());
+removeAdsInput.addEventListener("change", () => saveConfig());
 batchInput.addEventListener("input", () => {
-  saveConfig();
   refreshBatchPreview();
+  saveConfig();
 });
 
 loadConfig();
 setActiveTab("main");
 
 selectAllBtn.addEventListener("click", () => {
-  for (const key of batchSelection.keys()) {
-    batchSelection.set(key, true);
+  const selection = getBatchSelection(getActivePage());
+  for (const key of Object.keys(selection)) {
+    selection[key] = true;
   }
   refreshBatchPreview();
 });
 
 selectNoneBtn.addEventListener("click", () => {
-  for (const key of batchSelection.keys()) {
-    batchSelection.set(key, false);
+  const selection = getBatchSelection(getActivePage());
+  for (const key of Object.keys(selection)) {
+    selection[key] = false;
   }
   refreshBatchPreview();
 });

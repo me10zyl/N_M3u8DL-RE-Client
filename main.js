@@ -1,5 +1,6 @@
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { spawn } = require("child_process");
+const { fileURLToPath, pathToFileURL } = require("url");
 const iconv = require("iconv-lite");
 const fs = require("fs");
 const path = require("path");
@@ -14,42 +15,68 @@ function getConfigPath() {
   return path.join(app.getPath("userData"), "config.json");
 }
 
-function readConfig() {
-  const configPath = getConfigPath();
+function createDefaultPage(parsed = {}) {
+  return {
+    id: "page-1",
+    title: parsed.showName || "页面 1",
+    showName: parsed.showName || "",
+    finalRoot: parsed.finalRoot || "",
+    batchInput: parsed.batchInput || ""
+  };
+}
+
+function normalizePages(parsed = {}) {
+  const pages = Array.isArray(parsed.pages) && parsed.pages.length > 0
+    ? parsed.pages
+    : [createDefaultPage(parsed)];
+
+  return pages.map((page, index) => {
+    const id = page.id || `page-${index + 1}`;
+    const showName = page.showName || "";
+    return {
+      id,
+      title: page.title || showName || `页面 ${index + 1}`,
+      showName,
+      finalRoot: page.finalRoot || "",
+      batchInput: page.batchInput || ""
+    };
+  });
+}
+
+function createConfig(parsed = {}) {
   const defaultExe = path.join(app.getAppPath(), "bin", "N_m3u8DL-RE.exe");
   const fallbackExe = path.join(process.resourcesPath, "bin", "N_m3u8DL-RE.exe");
   const defaultTempRoot = path.join(app.getAppPath(), "tmp");
+  const exeCandidate = parsed.exePath || "";
+  const resolvedExe = fs.existsSync(exeCandidate)
+    ? exeCandidate
+    : fs.existsSync(defaultExe)
+    ? defaultExe
+    : fs.existsSync(fallbackExe)
+    ? fallbackExe
+    : "";
+  const pages = normalizePages(parsed);
+  const activePage = pages.find((page) => page.id === parsed.activePageId) || pages[0];
+
+  return {
+    exePath: resolvedExe,
+    tempRoot: parsed.tempRoot || defaultTempRoot,
+    removeAds: parsed.removeAds !== false,
+    activePageId: activePage.id,
+    pages,
+    showName: activePage.showName,
+    finalRoot: activePage.finalRoot,
+    batchInput: activePage.batchInput
+  };
+}
+
+function readConfig() {
+  const configPath = getConfigPath();
   try {
     const raw = fs.readFileSync(configPath, "utf-8");
-    const parsed = JSON.parse(raw);
-    const exeCandidate = parsed.exePath || "";
-    const resolvedExe = fs.existsSync(exeCandidate)
-      ? exeCandidate
-      : fs.existsSync(defaultExe)
-      ? defaultExe
-      : fs.existsSync(fallbackExe)
-      ? fallbackExe
-      : "";
-    return {
-      exePath: resolvedExe,
-      tempRoot: parsed.tempRoot || defaultTempRoot,
-      finalRoot: parsed.finalRoot || "",
-      showName: parsed.showName || "",
-      batchInput: parsed.batchInput || ""
-    };
+    return createConfig(JSON.parse(raw));
   } catch (error) {
-    const resolvedExe = fs.existsSync(defaultExe)
-      ? defaultExe
-      : fs.existsSync(fallbackExe)
-      ? fallbackExe
-      : "";
-    return {
-      exePath: resolvedExe,
-      tempRoot: defaultTempRoot,
-      finalRoot: "",
-      showName: "",
-      batchInput: ""
-    };
+    return createConfig();
   }
 }
 
@@ -162,7 +189,7 @@ function notifyTaskUpdate(payload) {
 
 function decodeOutput(buffer) {
   const utf8Text = buffer.toString("utf8");
-  if (utf8Text.includes("\uFFFD")) {
+  if (utf8Text.includes("�")) {
     try {
       return iconv.decode(buffer, "gbk");
     } catch (error) {
@@ -188,6 +215,154 @@ function formatCommand(exePath, args) {
   return parts.join(" ");
 }
 
+function isHttpUrl(source) {
+  try {
+    const parsed = new URL(source);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch (error) {
+    return false;
+  }
+}
+
+function isFileUrl(source) {
+  try {
+    return new URL(source).protocol === "file:";
+  } catch (error) {
+    return false;
+  }
+}
+
+async function readPlaylistText(source) {
+  if (isHttpUrl(source)) {
+    const response = await fetch(source);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    }
+    return response.text();
+  }
+
+  const filePath = isFileUrl(source) ? fileURLToPath(source) : source;
+  return fs.promises.readFile(filePath, "utf-8");
+}
+
+function removeDiscontinuityAdBlocks(m3u8Text) {
+  const hasTrailingNewline = /\r?\n$/.test(m3u8Text);
+  const lines = m3u8Text.split(/\r?\n/);
+  if (lines.length && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+
+  const nextLines = [];
+  let removedBlocks = 0;
+  let removedSegments = 0;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    if (lines[i].trim() !== "#EXT-X-DISCONTINUITY") {
+      nextLines.push(lines[i]);
+      continue;
+    }
+
+    let end = -1;
+    for (let j = i + 1; j < lines.length; j += 1) {
+      if (lines[j].trim() === "#EXT-X-DISCONTINUITY") {
+        end = j;
+        break;
+      }
+    }
+
+    if (end === -1) {
+      nextLines.push(lines[i]);
+      continue;
+    }
+
+    const blockLines = lines.slice(i + 1, end);
+    const segmentCount = blockLines.filter((line) => line.trim().startsWith("#EXTINF")).length;
+    if (segmentCount === 0) {
+      nextLines.push(lines[i]);
+      continue;
+    }
+
+    removedBlocks += 1;
+    removedSegments += segmentCount;
+    i = end;
+  }
+
+  return {
+    text: `${nextLines.join("\n")}${hasTrailingNewline ? "\n" : ""}`,
+    removedBlocks,
+    removedSegments
+  };
+}
+
+function resolvePlaylistReference(reference, source) {
+  if (!reference || /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(reference)) {
+    return reference;
+  }
+
+  if (isHttpUrl(source) || isFileUrl(source)) {
+    return new URL(reference, source).toString();
+  }
+
+  const absolutePath = path.resolve(path.dirname(source), reference);
+  return pathToFileURL(absolutePath).toString();
+}
+
+function rewriteUriAttributes(line, source) {
+  return line.replace(/URI="([^"]+)"/g, (match, uri) => {
+    return `URI="${resolvePlaylistReference(uri, source)}"`;
+  });
+}
+
+function rewritePlaylistUrisToAbsolute(m3u8Text, source) {
+  const hasTrailingNewline = /\r?\n$/.test(m3u8Text);
+  const lines = m3u8Text.split(/\r?\n/);
+  if (lines.length && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+
+  const rewritten = lines.map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      return line;
+    }
+    if (trimmed.startsWith("#")) {
+      return rewriteUriAttributes(line, source);
+    }
+    return resolvePlaylistReference(trimmed, source);
+  });
+
+  return `${rewritten.join("\n")}${hasTrailingNewline ? "\n" : ""}`;
+}
+
+function notifyTaskLog(task, message) {
+  notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "log", message });
+}
+
+async function prepareDownloadInput(task) {
+  if (!task.removeAds) {
+    return task.url;
+  }
+
+  const playlistText = await readPlaylistText(task.url);
+  const hasMediaSegments = /^#EXTINF/m.test(playlistText);
+  const isMasterPlaylist = /^#EXT-X-STREAM-INF/m.test(playlistText) && !hasMediaSegments;
+  if (isMasterPlaylist) {
+    notifyTaskLog(task, "去广告跳过：当前链接是主播放列表，将由下载器自动选择清晰度。\n");
+    return task.url;
+  }
+
+  const sanitized = removeDiscontinuityAdBlocks(playlistText);
+  const rewritten = rewritePlaylistUrisToAbsolute(sanitized.text, task.url);
+  const outputPath = path.join(task.tempShowDir, `${task.saveName}.adfree.m3u8`);
+  await fs.promises.writeFile(outputPath, rewritten, "utf-8");
+  task.generatedPlaylistPath = outputPath;
+  notifyTaskLog(
+    task,
+    `去广告完成：移除 ${sanitized.removedBlocks} 个区块，${sanitized.removedSegments} 个分片。\n`
+  );
+  return outputPath;
+}
+
 async function runNext() {
   if (running || queue.length === 0) {
     return;
@@ -196,20 +371,37 @@ async function runNext() {
 
   const task = queue.shift();
   currentTask = task;
-  notifyTaskUpdate({ id: task.id, status: "running" });
+  notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "running" });
 
   try {
     ensureDir(task.tempShowDir);
     ensureDir(task.finalShowDir);
   } catch (error) {
-    notifyTaskUpdate({ id: task.id, status: "error", message: error.message });
+    notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "error", message: error.message });
+    currentTask = null;
+    running = false;
+    runNext();
+    return;
+  }
+
+  let downloadInput;
+  try {
+    downloadInput = await prepareDownloadInput(task);
+  } catch (error) {
+    notifyTaskUpdate({
+      id: task.id,
+      pageId: task.pageId,
+      status: "error",
+      message: `Ad removal failed: ${error.message}`
+    });
+    currentTask = null;
     running = false;
     runNext();
     return;
   }
 
   const args = [
-    task.url,
+    downloadInput,
     "--tmp-dir",
     task.tempShowDir,
     "--save-dir",
@@ -221,6 +413,7 @@ async function runNext() {
 
   notifyTaskUpdate({
     id: task.id,
+    pageId: task.pageId,
     status: "log",
     message: `CMD: ${formatCommand(task.exePath, args)}\n`
   });
@@ -230,11 +423,11 @@ async function runNext() {
   });
 
   currentProcess.stdout.on("data", (data) => {
-    notifyTaskUpdate({ id: task.id, status: "log", message: decodeOutput(data) });
+    notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "log", message: decodeOutput(data) });
   });
 
   currentProcess.stderr.on("data", (data) => {
-    notifyTaskUpdate({ id: task.id, status: "log", message: decodeOutput(data) });
+    notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "log", message: decodeOutput(data) });
   });
 
   currentProcess.on("close", async (code) => {
@@ -242,19 +435,23 @@ async function runNext() {
     currentTask = null;
     if (code === 0) {
       try {
+        if (task.generatedPlaylistPath) {
+          await fs.promises.rm(task.generatedPlaylistPath, { force: true });
+        }
         await moveDirectoryContents(task.tempShowDir, task.finalShowDir);
-        notifyTaskUpdate({ id: task.id, status: "done" });
+        notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "done" });
       } catch (error) {
         notifyTaskUpdate({
           id: task.id,
+          pageId: task.pageId,
           status: "error",
           message: `Move failed: ${error.message}`
         });
       }
     } else if (task.cancelled) {
-      notifyTaskUpdate({ id: task.id, status: "cancelled" });
+      notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "cancelled" });
     } else {
-      notifyTaskUpdate({ id: task.id, status: "error", message: `Exit code ${code}` });
+      notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "error", message: `Exit code ${code}` });
     }
 
     running = false;
@@ -263,12 +460,14 @@ async function runNext() {
 }
 
 ipcMain.handle("tasks:start", (event, payload) => {
-  let { exePath, tempRoot, finalRoot, showName, items } = payload;
+  let { exePath, tempRoot, finalRoot, showName, pageId, removeAds, items } = payload;
   const normalizedShow = (showName || "").trim();
   const storedConfig = readConfig();
   exePath = exePath || storedConfig.exePath;
   tempRoot = tempRoot || storedConfig.tempRoot;
   finalRoot = finalRoot || storedConfig.finalRoot;
+  pageId = pageId || storedConfig.activePageId;
+  removeAds = removeAds !== false;
   if (!exePath || !tempRoot || !finalRoot || !normalizedShow) {
     return { ok: false, message: "Missing required settings." };
   }
@@ -293,11 +492,13 @@ ipcMain.handle("tasks:start", (event, payload) => {
 
     tasks.push({
       id,
+      pageId,
       exePath,
       url,
       tempShowDir,
       finalShowDir,
-      saveName
+      saveName,
+      removeAds
     });
   }
 
@@ -307,7 +508,7 @@ ipcMain.handle("tasks:start", (event, payload) => {
 
   queue.push(...tasks);
   for (const task of tasks) {
-    notifyTaskUpdate({ id: task.id, status: "queued", name: task.saveName });
+    notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "queued", name: task.saveName });
   }
   runNext();
 
@@ -327,7 +528,7 @@ ipcMain.handle("tasks:cancel", () => {
 
 ipcMain.handle("tasks:stop-all", () => {
   for (const task of queue) {
-    notifyTaskUpdate({ id: task.id, status: "cancelled" });
+    notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "cancelled" });
   }
   queue = [];
   if (currentProcess) {
@@ -355,8 +556,8 @@ ipcMain.handle("tasks:remove", (event, id) => {
 
   const index = queue.findIndex((task) => task.id === id);
   if (index !== -1) {
-    queue.splice(index, 1);
-    notifyTaskUpdate({ id, status: "cancelled" });
+    const [task] = queue.splice(index, 1);
+    notifyTaskUpdate({ id, pageId: task.pageId, status: "cancelled" });
     return { ok: true, removed: "queued" };
   }
 

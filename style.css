@@ -115,6 +115,46 @@ textarea {
   margin-top: 12px;
 }
 
+.download-pages {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.download-page-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.download-page-tab {
+  border: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  background: #f3ede3;
+  color: #5a4b36;
+}
+
+.download-page-tab.active {
+  background: #355c3b;
+  color: #ffffff;
+}
+
+.checkbox-field {
+  flex-direction: row;
+  align-items: center;
+  align-self: end;
+}
+
+.checkbox-field input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
 .batch-list {
   margin-top: 12px;
   display: flex;
@@ -251,7 +291,8 @@ textarea {
 }
 
 @media (max-width: 720px) {
-  .actions {
+  .actions,
+  .download-pages {
     flex-direction: column;
     align-items: stretch;
   }

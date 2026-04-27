@@ -20,6 +20,11 @@
       </header>
 
       <section id="mainView">
+        <section class="download-pages card">
+          <div id="downloadPageTabs" class="download-page-tabs"></div>
+          <button id="addDownloadPage" class="btn small">新增页面</button>
+        </section>
+
         <section class="card">
           <div class="grid">
             <label class="field">
@@ -83,6 +88,10 @@
                 <input id="tempRoot" placeholder="下载临时根目录" />
                 <button id="pickTemp" class="btn">选择</button>
               </div>
+            </label>
+            <label class="field checkbox-field">
+              <input id="removeAds" type="checkbox" />
+              <span>默认移除疑似广告片段</span>
             </label>
           </div>
         </section>
