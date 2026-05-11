@@ -66,6 +66,7 @@ function createConfig(parsed = {}) {
     exePath: resolvedExe,
     tempRoot: parsed.tempRoot || defaultTempRoot,
     removeAds: parsed.removeAds !== false,
+    useSystemProxy: parsed.useSystemProxy === true,
     adSegmentThreshold: normalizeAdSegmentThreshold(parsed.adSegmentThreshold),
     activePageId: activePage.id,
     pages,
@@ -394,6 +395,10 @@ async function runNext() {
     ensureDir(task.finalShowDir);
 
     const extraArgs = [];
+    if (task.useSystemProxy) {
+      extraArgs.push("--use-system-proxy", "true");
+    }
+
     if (task.removeAds) {
       const adKeyword = await prepareAdKeyword(task);
       if (task.cancelled) {
@@ -443,7 +448,7 @@ async function runNext() {
 }
 
 ipcMain.handle("tasks:start", (event, payload) => {
-  let { exePath, tempRoot, finalRoot, showName, pageId, removeAds, adSegmentThreshold, items } = payload;
+  let { exePath, tempRoot, finalRoot, showName, pageId, removeAds, useSystemProxy, adSegmentThreshold, items } = payload;
   const normalizedShow = (showName || "").trim();
   const storedConfig = readConfig();
   exePath = exePath || storedConfig.exePath;
@@ -451,6 +456,7 @@ ipcMain.handle("tasks:start", (event, payload) => {
   finalRoot = finalRoot || storedConfig.finalRoot;
   pageId = pageId || storedConfig.activePageId;
   removeAds = removeAds !== false;
+  useSystemProxy = useSystemProxy === true;
   adSegmentThreshold = normalizeAdSegmentThreshold(adSegmentThreshold || storedConfig.adSegmentThreshold);
   if (!exePath || !tempRoot || !finalRoot || !normalizedShow) {
     return { ok: false, message: "Missing required settings." };
@@ -483,6 +489,7 @@ ipcMain.handle("tasks:start", (event, payload) => {
       finalShowDir,
       saveName,
       removeAds,
+      useSystemProxy,
       adSegmentThreshold
     });
   }
