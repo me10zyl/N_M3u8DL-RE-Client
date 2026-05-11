@@ -3,6 +3,7 @@ const exePathInput = document.getElementById("exePath");
 const tempRootInput = document.getElementById("tempRoot");
 const finalRootInput = document.getElementById("finalRoot");
 const removeAdsInput = document.getElementById("removeAds");
+const useSystemProxyInput = document.getElementById("useSystemProxy");
 const adSegmentThresholdInput = document.getElementById("adSegmentThreshold");
 const batchInput = document.getElementById("batchInput");
 const startBtn = document.getElementById("startBtn");
@@ -327,6 +328,7 @@ async function loadConfig() {
   exePathInput.value = config.exePath || "";
   tempRootInput.value = config.tempRoot || "";
   removeAdsInput.checked = config.removeAds !== false;
+  useSystemProxyInput.checked = config.useSystemProxy === true;
   adSegmentThresholdInput.value = String(parseAdSegmentThreshold(config.adSegmentThreshold));
   loadActivePageToDom();
   renderDownloadPageTabs();
@@ -339,6 +341,7 @@ async function saveConfig() {
     exePath: exePathInput.value.trim(),
     tempRoot: tempRootInput.value.trim(),
     removeAds: removeAdsInput.checked,
+    useSystemProxy: useSystemProxyInput.checked,
     adSegmentThreshold: parseAdSegmentThreshold(adSegmentThresholdInput.value),
     activePageId: appState.activePageId,
     pages: appState.pages.map((page) => ({
@@ -415,6 +418,7 @@ startBtn.addEventListener("click", async () => {
     tempRoot,
     finalRoot,
     removeAds: removeAdsInput.checked,
+    useSystemProxy: useSystemProxyInput.checked,
     adSegmentThreshold,
     items: selectedItems
   });
@@ -486,6 +490,7 @@ exePathInput.addEventListener("input", () => saveConfig());
 tempRootInput.addEventListener("input", () => saveConfig());
 finalRootInput.addEventListener("input", () => saveConfig());
 removeAdsInput.addEventListener("change", () => saveConfig());
+useSystemProxyInput.addEventListener("change", () => saveConfig());
 adSegmentThresholdInput.addEventListener("input", () => saveConfig());
 batchInput.addEventListener("input", () => {
   refreshBatchPreview();
