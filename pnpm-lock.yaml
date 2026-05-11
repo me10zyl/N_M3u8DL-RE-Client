@@ -11,6 +11,9 @@ importers:
       iconv-lite:
         specifier: ^0.6.3
         version: 0.6.3
+      safer-buffer:
+        specifier: ^2.1.2
+        version: 2.1.2
     devDependencies:
       electron:
         specifier: ^30.0.0

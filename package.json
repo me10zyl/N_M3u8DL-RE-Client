@@ -7,13 +7,14 @@
   "scripts": {
     "start": "electron .",
     "dist:win": "electron-builder -w",
-    "dist" : "electron-builder"
+    "dist": "electron-builder"
   },
   "devDependencies": {
     "electron": "^30.0.0",
     "electron-builder": "^24.13.3"
   },
   "dependencies": {
-    "iconv-lite": "^0.6.3"
+    "iconv-lite": "^0.6.3",
+    "safer-buffer": "^2.1.2"
   }
 }

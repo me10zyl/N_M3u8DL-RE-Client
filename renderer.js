@@ -3,6 +3,7 @@ const exePathInput = document.getElementById("exePath");
 const tempRootInput = document.getElementById("tempRoot");
 const finalRootInput = document.getElementById("finalRoot");
 const removeAdsInput = document.getElementById("removeAds");
+const adSegmentThresholdInput = document.getElementById("adSegmentThreshold");
 const batchInput = document.getElementById("batchInput");
 const startBtn = document.getElementById("startBtn");
 const cancelBtn = document.getElementById("cancelBtn");
@@ -188,6 +189,11 @@ function setActiveTab(tab) {
   }
 }
 
+function parseAdSegmentThreshold(value) {
+  const threshold = Number.parseInt(value, 10);
+  return Number.isFinite(threshold) && threshold > 0 ? threshold : 10;
+}
+
 function parseBatchInput(raw) {
   const lines = raw.split(/\r?\n/);
   const items = [];
@@ -321,6 +327,7 @@ async function loadConfig() {
   exePathInput.value = config.exePath || "";
   tempRootInput.value = config.tempRoot || "";
   removeAdsInput.checked = config.removeAds !== false;
+  adSegmentThresholdInput.value = String(parseAdSegmentThreshold(config.adSegmentThreshold));
   loadActivePageToDom();
   renderDownloadPageTabs();
 }
@@ -332,6 +339,7 @@ async function saveConfig() {
     exePath: exePathInput.value.trim(),
     tempRoot: tempRootInput.value.trim(),
     removeAds: removeAdsInput.checked,
+    adSegmentThreshold: parseAdSegmentThreshold(adSegmentThresholdInput.value),
     activePageId: appState.activePageId,
     pages: appState.pages.map((page) => ({
       id: page.id,
@@ -381,6 +389,7 @@ startBtn.addEventListener("click", async () => {
   const exePath = exePathInput.value.trim();
   const tempRoot = tempRootInput.value.trim();
   const finalRoot = finalRootInput.value.trim();
+  const adSegmentThreshold = parseAdSegmentThreshold(adSegmentThresholdInput.value);
   const raw = batchInput.value;
 
   const { items, errors } = parseBatchInput(raw);
@@ -406,6 +415,7 @@ startBtn.addEventListener("click", async () => {
     tempRoot,
     finalRoot,
     removeAds: removeAdsInput.checked,
+    adSegmentThreshold,
     items: selectedItems
   });
 
@@ -476,6 +486,7 @@ exePathInput.addEventListener("input", () => saveConfig());
 tempRootInput.addEventListener("input", () => saveConfig());
 finalRootInput.addEventListener("input", () => saveConfig());
 removeAdsInput.addEventListener("change", () => saveConfig());
+adSegmentThresholdInput.addEventListener("input", () => saveConfig());
 batchInput.addEventListener("input", () => {
   refreshBatchPreview();
   saveConfig();

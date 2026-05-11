@@ -1,6 +1,5 @@
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { spawn } = require("child_process");
-const { fileURLToPath, pathToFileURL } = require("url");
 const iconv = require("iconv-lite");
 const fs = require("fs");
 const path = require("path");
@@ -43,6 +42,11 @@ function normalizePages(parsed = {}) {
   });
 }
 
+function normalizeAdSegmentThreshold(value) {
+  const threshold = Number.parseInt(value, 10);
+  return Number.isFinite(threshold) && threshold > 0 ? threshold : 10;
+}
+
 function createConfig(parsed = {}) {
   const defaultExe = path.join(app.getAppPath(), "bin", "N_m3u8DL-RE.exe");
   const fallbackExe = path.join(process.resourcesPath, "bin", "N_m3u8DL-RE.exe");
@@ -62,6 +66,7 @@ function createConfig(parsed = {}) {
     exePath: resolvedExe,
     tempRoot: parsed.tempRoot || defaultTempRoot,
     removeAds: parsed.removeAds !== false,
+    adSegmentThreshold: normalizeAdSegmentThreshold(parsed.adSegmentThreshold),
     activePageId: activePage.id,
     pages,
     showName: activePage.showName,
@@ -215,152 +220,163 @@ function formatCommand(exePath, args) {
   return parts.join(" ");
 }
 
-function isHttpUrl(source) {
-  try {
-    const parsed = new URL(source);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch (error) {
-    return false;
-  }
-}
-
-function isFileUrl(source) {
-  try {
-    return new URL(source).protocol === "file:";
-  } catch (error) {
-    return false;
-  }
-}
-
-async function readPlaylistText(source) {
-  if (isHttpUrl(source)) {
-    const response = await fetch(source);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} ${response.statusText}`);
-    }
-    return response.text();
-  }
-
-  const filePath = isFileUrl(source) ? fileURLToPath(source) : source;
-  return fs.promises.readFile(filePath, "utf-8");
-}
-
-function removeDiscontinuityAdBlocks(m3u8Text) {
-  const hasTrailingNewline = /\r?\n$/.test(m3u8Text);
-  const lines = m3u8Text.split(/\r?\n/);
-  if (lines.length && lines[lines.length - 1] === "") {
-    lines.pop();
-  }
-
-  const nextLines = [];
-  let removedBlocks = 0;
-  let removedSegments = 0;
-
-  for (let i = 0; i < lines.length; i += 1) {
-    if (lines[i].trim() !== "#EXT-X-DISCONTINUITY") {
-      nextLines.push(lines[i]);
-      continue;
-    }
-
-    let end = -1;
-    for (let j = i + 1; j < lines.length; j += 1) {
-      if (lines[j].trim() === "#EXT-X-DISCONTINUITY") {
-        end = j;
-        break;
-      }
-    }
-
-    if (end === -1) {
-      nextLines.push(lines[i]);
-      continue;
-    }
-
-    const blockLines = lines.slice(i + 1, end);
-    const segmentCount = blockLines.filter((line) => line.trim().startsWith("#EXTINF")).length;
-    if (segmentCount === 0) {
-      nextLines.push(lines[i]);
-      continue;
-    }
-
-    removedBlocks += 1;
-    removedSegments += segmentCount;
-    i = end;
-  }
-
-  return {
-    text: `${nextLines.join("\n")}${hasTrailingNewline ? "\n" : ""}`,
-    removedBlocks,
-    removedSegments
-  };
-}
-
-function resolvePlaylistReference(reference, source) {
-  if (!reference || /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(reference)) {
-    return reference;
-  }
-
-  if (isHttpUrl(source) || isFileUrl(source)) {
-    return new URL(reference, source).toString();
-  }
-
-  const absolutePath = path.resolve(path.dirname(source), reference);
-  return pathToFileURL(absolutePath).toString();
-}
-
-function rewriteUriAttributes(line, source) {
-  return line.replace(/URI="([^"]+)"/g, (match, uri) => {
-    return `URI="${resolvePlaylistReference(uri, source)}"`;
-  });
-}
-
-function rewritePlaylistUrisToAbsolute(m3u8Text, source) {
-  const hasTrailingNewline = /\r?\n$/.test(m3u8Text);
-  const lines = m3u8Text.split(/\r?\n/);
-  if (lines.length && lines[lines.length - 1] === "") {
-    lines.pop();
-  }
-
-  const rewritten = lines.map((line) => {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      return line;
-    }
-    if (trimmed.startsWith("#")) {
-      return rewriteUriAttributes(line, source);
-    }
-    return resolvePlaylistReference(trimmed, source);
-  });
-
-  return `${rewritten.join("\n")}${hasTrailingNewline ? "\n" : ""}`;
-}
-
 function notifyTaskLog(task, message) {
   notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "log", message });
 }
 
-async function prepareDownloadInput(task) {
-  if (!task.removeAds) {
-    return task.url;
+function escapeRegex(value) {
+  return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+}
+
+function getSegmentFilename(url) {
+  const text = String(url || "").trim();
+  if (!text) {
+    return "";
   }
 
-  const playlistText = await readPlaylistText(task.url);
-  const hasMediaSegments = /^#EXTINF/m.test(playlistText);
-  const isMasterPlaylist = /^#EXT-X-STREAM-INF/m.test(playlistText) && !hasMediaSegments;
-  if (isMasterPlaylist) {
-    notifyTaskLog(task, "去广告跳过：当前链接是主播放列表，将由下载器自动选择清晰度。\n");
-    return task.url;
+  try {
+    return path.basename(new URL(text).pathname);
+  } catch (error) {
+    return path.basename(text.split(/[?#]/)[0]);
+  }
+}
+
+function extractSuspiciousAdFilenames(meta, adSegmentThreshold = 10) {
+  const threshold = normalizeAdSegmentThreshold(adSegmentThreshold);
+  const filenames = new Set();
+  if (!Array.isArray(meta)) {
+    return [];
   }
 
-  const sanitized = removeDiscontinuityAdBlocks(playlistText);
-  const rewritten = rewritePlaylistUrisToAbsolute(sanitized.text, task.url);
-  const outputPath = path.join(task.tempShowDir, `${task.saveName}.adfree.m3u8`);
-  await fs.promises.writeFile(outputPath, rewritten, "utf-8");
-  task.generatedPlaylistPath = outputPath;
-  notifyTaskLog(
-    task,
-    `去广告完成：移除 ${sanitized.removedBlocks} 个区块，${sanitized.removedSegments} 个分片。\n`
-  );
-  return outputPath;
+  for (const item of meta) {
+    const mediaParts = item && item.Playlist && Array.isArray(item.Playlist.MediaParts)
+      ? item.Playlist.MediaParts
+      : [];
+
+    for (const part of mediaParts) {
+      const segments = part && Array.isArray(part.MediaSegments) ? part.MediaSegments : [];
+      if (segments.length === 0 || segments.length >= threshold) {
+        continue;
+      }
+
+      for (const segment of segments) {
+        const filename = getSegmentFilename(segment && segment.Url);
+        if (filename) {
+          filenames.add(filename);
+        }
+      }
+    }
+  }
+
+  return [...filenames];
+}
+
+async function findNewestFile(rootDir, targetName) {
+  let newest = null;
+
+  async function walk(dir) {
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const entryPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(entryPath);
+        continue;
+      }
+      if (entry.name !== targetName) {
+        continue;
+      }
+
+      const stats = await fs.promises.stat(entryPath);
+      if (!newest || stats.mtimeMs > newest.mtimeMs) {
+        newest = { path: entryPath, mtimeMs: stats.mtimeMs };
+      }
+    }
+  }
+
+  await walk(rootDir);
+  return newest ? newest.path : "";
+}
+
+function buildDownloadArgs(input, tmpDir, saveDir, saveName, extraArgs = []) {
+  return [
+    input,
+    "--tmp-dir",
+    tmpDir,
+    "--save-dir",
+    saveDir,
+    "--save-name",
+    saveName,
+    "--auto-select",
+    ...extraArgs
+  ];
+}
+
+function runDownloader(task, args) {
+  notifyTaskUpdate({
+    id: task.id,
+    pageId: task.pageId,
+    status: "log",
+    message: `CMD: ${formatCommand(task.exePath, args)}\n`
+  });
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(task.exePath, args, {
+      windowsHide: true
+    });
+    currentProcess = child;
+
+    child.stdout.on("data", (data) => {
+      notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "log", message: decodeOutput(data) });
+    });
+
+    child.stderr.on("data", (data) => {
+      notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "log", message: decodeOutput(data) });
+    });
+
+    child.on("error", (error) => {
+      currentProcess = null;
+      reject(error);
+    });
+
+    child.on("close", (code) => {
+      currentProcess = null;
+      resolve(code);
+    });
+  });
+}
+
+async function prepareAdKeyword(task) {
+  const parseTmpDir = path.join(path.dirname(task.tempShowDir), `${path.basename(task.tempShowDir)}.${task.saveName}.parse`);
+  await fs.promises.rm(parseTmpDir, { recursive: true, force: true });
+  ensureDir(parseTmpDir);
+
+  const parseArgs = buildDownloadArgs(task.url, parseTmpDir, parseTmpDir, task.saveName, ["--skip-download"]);
+  notifyTaskLog(task, `去广告解析：先跳过下载并生成 meta_selected.json，片段阈值 ${task.adSegmentThreshold}。\n`);
+  const code = await runDownloader(task, parseArgs);
+  if (task.cancelled) {
+    return "";
+  }
+  if (code !== 0) {
+    throw new Error(`Parse exited with code ${code}`);
+  }
+
+  const metaPath = await findNewestFile(parseTmpDir, "meta_selected.json");
+  if (!metaPath) {
+    throw new Error("meta_selected.json not found");
+  }
+
+  const metaText = await fs.promises.readFile(metaPath, "utf-8");
+  const meta = JSON.parse(metaText.replace(/^\uFEFF/, ""));
+  const filenames = extractSuspiciousAdFilenames(meta, task.adSegmentThreshold);
+  await fs.promises.rm(parseTmpDir, { recursive: true, force: true });
+
+  if (filenames.length === 0) {
+    notifyTaskLog(task, "去广告解析完成：未发现可疑广告分片，将正常下载。\n");
+    return "";
+  }
+
+  notifyTaskLog(task, `去广告解析完成：发现 ${filenames.length} 个可疑广告分片。\n`);
+  return filenames.map(escapeRegex).join("|");
 }
 
 async function runNext() {
@@ -376,68 +392,23 @@ async function runNext() {
   try {
     ensureDir(task.tempShowDir);
     ensureDir(task.finalShowDir);
-  } catch (error) {
-    notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "error", message: error.message });
-    currentTask = null;
-    running = false;
-    runNext();
-    return;
-  }
 
-  let downloadInput;
-  try {
-    downloadInput = await prepareDownloadInput(task);
-  } catch (error) {
-    notifyTaskUpdate({
-      id: task.id,
-      pageId: task.pageId,
-      status: "error",
-      message: `Ad removal failed: ${error.message}`
-    });
-    currentTask = null;
-    running = false;
-    runNext();
-    return;
-  }
+    const extraArgs = [];
+    if (task.removeAds) {
+      const adKeyword = await prepareAdKeyword(task);
+      if (task.cancelled) {
+        notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "cancelled" });
+        return;
+      }
+      if (adKeyword) {
+        extraArgs.push("--ad-keyword", adKeyword);
+      }
+    }
 
-  const args = [
-    downloadInput,
-    "--tmp-dir",
-    task.tempShowDir,
-    "--save-dir",
-    task.tempShowDir,
-    "--save-name",
-    task.saveName,
-    "--auto-select"
-  ];
-
-  notifyTaskUpdate({
-    id: task.id,
-    pageId: task.pageId,
-    status: "log",
-    message: `CMD: ${formatCommand(task.exePath, args)}\n`
-  });
-
-  currentProcess = spawn(task.exePath, args, {
-    windowsHide: true
-  });
-
-  currentProcess.stdout.on("data", (data) => {
-    notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "log", message: decodeOutput(data) });
-  });
-
-  currentProcess.stderr.on("data", (data) => {
-    notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "log", message: decodeOutput(data) });
-  });
-
-  currentProcess.on("close", async (code) => {
-    currentProcess = null;
-    currentTask = null;
+    const args = buildDownloadArgs(task.url, task.tempShowDir, task.tempShowDir, task.saveName, extraArgs);
+    const code = await runDownloader(task, args);
     if (code === 0) {
       try {
-        if (task.generatedPlaylistPath) {
-          await fs.promises.rm(task.generatedPlaylistPath, { force: true });
-        }
         await moveDirectoryContents(task.tempShowDir, task.finalShowDir);
         notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "done" });
       } catch (error) {
@@ -453,14 +424,26 @@ async function runNext() {
     } else {
       notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "error", message: `Exit code ${code}` });
     }
-
+  } catch (error) {
+    if (task.cancelled) {
+      notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "cancelled" });
+    } else {
+      notifyTaskUpdate({
+        id: task.id,
+        pageId: task.pageId,
+        status: "error",
+        message: `Task failed: ${error.message}`
+      });
+    }
+  } finally {
+    currentTask = null;
     running = false;
     runNext();
-  });
+  }
 }
 
 ipcMain.handle("tasks:start", (event, payload) => {
-  let { exePath, tempRoot, finalRoot, showName, pageId, removeAds, items } = payload;
+  let { exePath, tempRoot, finalRoot, showName, pageId, removeAds, adSegmentThreshold, items } = payload;
   const normalizedShow = (showName || "").trim();
   const storedConfig = readConfig();
   exePath = exePath || storedConfig.exePath;
@@ -468,6 +451,7 @@ ipcMain.handle("tasks:start", (event, payload) => {
   finalRoot = finalRoot || storedConfig.finalRoot;
   pageId = pageId || storedConfig.activePageId;
   removeAds = removeAds !== false;
+  adSegmentThreshold = normalizeAdSegmentThreshold(adSegmentThreshold || storedConfig.adSegmentThreshold);
   if (!exePath || !tempRoot || !finalRoot || !normalizedShow) {
     return { ok: false, message: "Missing required settings." };
   }
@@ -498,7 +482,8 @@ ipcMain.handle("tasks:start", (event, payload) => {
       tempShowDir,
       finalShowDir,
       saveName,
-      removeAds
+      removeAds,
+      adSegmentThreshold
     });
   }
 
