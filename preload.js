@@ -10,7 +10,6 @@ contextBridge.exposeInMainWorld("api", {
   stopAll: () => ipcRenderer.invoke("tasks:stop-all"),
   removeTask: (id) => ipcRenderer.invoke("tasks:remove", id),
   debugAdMeta: (payload) => ipcRenderer.invoke("ad-debug:meta", payload),
-  previewAdSegment: (payload) => ipcRenderer.invoke("ad-debug:preview", payload),
   onAdDebugLog: (handler) => ipcRenderer.on("ad-debug:log", handler),
   onTaskUpdate: (handler) => ipcRenderer.on("task:update", handler)
 });

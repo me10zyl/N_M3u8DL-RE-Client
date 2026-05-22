@@ -1,9 +1,8 @@
-const { app, BrowserWindow, dialog, ipcMain, net } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { spawn } = require("child_process");
 const iconv = require("iconv-lite");
 const fs = require("fs");
 const path = require("path");
-const { pathToFileURL } = require("url");
 
 let mainWindow;
 let currentProcess = null;
@@ -503,32 +502,6 @@ ipcMain.handle("ad-debug:meta", async (event, payload) => {
   }
 });
 
-ipcMain.handle("ad-debug:preview", async (event, payload) => {
-  const storedConfig = readConfig();
-  const tempRoot = (payload && payload.tempRoot) || storedConfig.tempRoot;
-  const url = (payload && payload.url || "").trim();
-  const filename = (payload && payload.filename || getSegmentFilename(url) || "preview.ts").replace(/[\\/:*?"<>|]/g, "_");
-  if (!tempRoot || !url) {
-    return { ok: false, message: "缺少临时目录或 ts 下载链接。" };
-  }
-
-  const previewDir = path.join(tempRoot, "ad-debug-preview");
-  ensureDir(previewDir);
-  const targetPath = path.join(previewDir, `${Date.now()}-${filename}`);
-
-  try {
-    const response = await net.fetch(url);
-    if (!response.ok) {
-      return { ok: false, message: `下载失败：HTTP ${response.status}` };
-    }
-
-    const buffer = Buffer.from(await response.arrayBuffer());
-    await fs.promises.writeFile(targetPath, buffer);
-    return { ok: true, filePath: targetPath, fileUrl: pathToFileURL(targetPath).href };
-  } catch (error) {
-    return { ok: false, message: error.message };
-  }
-});
 
 ipcMain.handle("tasks:start", (event, payload) => {
   let { exePath, tempRoot, finalRoot, showName, pageId, removeAds, useSystemProxy, adSegmentThreshold, items } = payload;

@@ -388,22 +388,12 @@ function renderAdDebugSegmentResults(matches) {
     const link = document.createElement("a");
     link.href = match.url;
     link.textContent = `${match.filename} [${match.index}] [${match.duration}] [${match.groupSize}] [${match.url}]`;
-    link.addEventListener("click", async (event) => {
+    link.addEventListener("click", (event) => {
       event.preventDefault();
-      setAdDebugStatus(`正在下载预览片段：${match.filename}`);
-      const response = await window.api.previewAdSegment({
-        url: match.url,
-        filename: match.filename,
-        tempRoot: tempRootInput.value.trim()
-      });
-      if (!response.ok) {
-        setAdDebugStatus(response.message || "预览片段下载失败");
-        return;
-      }
-      adDebugPreviewEl.src = response.fileUrl || response.filePath;
+      adDebugPreviewEl.src = match.url;
       adDebugPreviewEl.classList.remove("hidden");
       adDebugPreviewEl.play().catch(() => {});
-      setAdDebugStatus(`已下载预览片段：${response.filePath}`);
+      setAdDebugStatus(`正在预览片段：${match.filename}`);
     });
     adDebugResultEl.appendChild(link);
     adDebugResultEl.appendChild(document.createTextNode("\n"));
