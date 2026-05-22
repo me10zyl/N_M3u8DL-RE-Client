@@ -222,6 +222,9 @@ function formatCommand(exePath, args) {
 }
 
 function notifyTaskLog(task, message) {
+  if (task.silent) {
+    return;
+  }
   notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "log", message });
 }
 
@@ -346,16 +349,14 @@ function runDownloader(task, args) {
   });
 }
 
-async function prepareAdKeyword(task) {
-  const parseTmpDir = path.join(path.dirname(task.tempShowDir), `${path.basename(task.tempShowDir)}.${task.saveName}.parse`);
+async function parseMetaSelected(task, parseTmpDir) {
   await fs.promises.rm(parseTmpDir, { recursive: true, force: true });
   ensureDir(parseTmpDir);
 
   const parseArgs = buildDownloadArgs(task.url, parseTmpDir, parseTmpDir, task.saveName, ["--skip-download"]);
-  notifyTaskLog(task, `去广告解析：先跳过下载并生成 meta_selected.json，片段阈值 ${task.adSegmentThreshold}。\n`);
   const code = await runDownloader(task, parseArgs);
   if (task.cancelled) {
-    return "";
+    return null;
   }
   if (code !== 0) {
     throw new Error(`Parse exited with code ${code}`);
@@ -367,7 +368,21 @@ async function prepareAdKeyword(task) {
   }
 
   const metaText = await fs.promises.readFile(metaPath, "utf-8");
-  const meta = JSON.parse(metaText.replace(/^\uFEFF/, ""));
+  return {
+    metaText: metaText.replace(/^\uFEFF/, ""),
+    metaPath
+  };
+}
+
+async function prepareAdKeyword(task) {
+  const parseTmpDir = path.join(path.dirname(task.tempShowDir), `${path.basename(task.tempShowDir)}.${task.saveName}.parse`);
+  notifyTaskLog(task, `去广告解析：先跳过下载并生成 meta_selected.json，片段阈值 ${task.adSegmentThreshold}。\n`);
+  const parsed = await parseMetaSelected(task, parseTmpDir);
+  if (!parsed) {
+    return "";
+  }
+
+  const meta = JSON.parse(parsed.metaText);
   const filenames = extractSuspiciousAdFilenames(meta, task.adSegmentThreshold);
   await fs.promises.rm(parseTmpDir, { recursive: true, force: true });
 
@@ -446,6 +461,41 @@ async function runNext() {
     runNext();
   }
 }
+
+ipcMain.handle("ad-debug:meta", async (event, payload) => {
+  const storedConfig = readConfig();
+  const exePath = (payload && payload.exePath) || storedConfig.exePath;
+  const tempRoot = (payload && payload.tempRoot) || storedConfig.tempRoot;
+  const url = (payload && payload.url || "").trim();
+  if (!exePath || !tempRoot || !url) {
+    return { ok: false, message: "请先填写 m3u8 地址，并配置程序路径和临时目录。" };
+  }
+  if (!fs.existsSync(exePath)) {
+    return { ok: false, message: "N_m3u8DL-RE.exe not found. Please set the path in Settings." };
+  }
+
+  const parseTmpDir = path.join(tempRoot, `ad-debug-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const task = {
+    id: "ad-debug",
+    pageId: "ad-debug",
+    exePath,
+    url,
+    saveName: "ad-debug",
+    silent: true
+  };
+
+  try {
+    const parsed = await parseMetaSelected(task, parseTmpDir);
+    if (!parsed) {
+      return { ok: false, message: "解析已取消。" };
+    }
+    return { ok: true, metaText: parsed.metaText, metaPath: parsed.metaPath };
+  } catch (error) {
+    return { ok: false, message: error.message };
+  } finally {
+    await fs.promises.rm(parseTmpDir, { recursive: true, force: true });
+  }
+});
 
 ipcMain.handle("tasks:start", (event, payload) => {
   let { exePath, tempRoot, finalRoot, showName, pageId, removeAds, useSystemProxy, adSegmentThreshold, items } = payload;

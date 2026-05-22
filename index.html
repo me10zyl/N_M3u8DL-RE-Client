@@ -102,8 +102,53 @@
               <input id="adSegmentThreshold" type="number" min="1" step="1" value="10" />
             </label>
           </div>
+          <div class="actions">
+            <button id="openAdDebug" class="btn">调试去广告</button>
+          </div>
         </section>
       </section>
+    </div>
+
+    <div id="adDebugModal" class="modal hidden">
+      <div class="modal-panel">
+        <div class="modal-header">
+          <h2>调试去广告</h2>
+          <button id="closeAdDebug" class="btn small">关闭</button>
+        </div>
+        <label class="field">
+          <span>m3u8 地址</span>
+          <div class="row">
+            <input id="adDebugUrl" placeholder="输入 m3u8 地址" />
+            <button id="loadAdDebugMeta" class="btn primary">获取 meta_selected.json</button>
+          </div>
+        </label>
+        <div class="ad-debug-toolbar">
+          <label class="field inline-field">
+            <span>搜索</span>
+            <input id="adDebugSearch" placeholder="搜索 meta_selected.json" />
+          </label>
+          <button id="adDebugPrev" class="btn small">上一个</button>
+          <button id="adDebugNext" class="btn small">下一个</button>
+          <span id="adDebugSearchStatus" class="status"></span>
+        </div>
+        <div class="ad-debug-toolbar">
+          <label class="field inline-field small-number-field">
+            <span>小于</span>
+            <input id="adDebugThreshold" type="number" min="1" step="1" value="10" />
+          </label>
+          <button id="findAdSegments" class="btn">获取 MediaSegments 中小于阈值段的广告</button>
+          <label class="field inline-field duration-field">
+            <span>duration 序列</span>
+            <textarea id="durationSequence" placeholder="每行一个 duration 数字"></textarea>
+          </label>
+          <button id="findDurationSequence" class="btn">定位 duration 序列</button>
+        </div>
+        <div id="adDebugStatus" class="status"></div>
+        <div class="ad-debug-content">
+          <pre id="adDebugMeta" class="log meta-log"></pre>
+          <pre id="adDebugResult" class="log result-log"></pre>
+        </div>
+      </div>
     </div>
 
     <script src="renderer.js"></script>

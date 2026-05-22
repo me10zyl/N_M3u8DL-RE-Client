@@ -25,6 +25,27 @@ const taskList = document.getElementById("taskList");
 const logEl = document.getElementById("log");
 const downloadPageTabs = document.getElementById("downloadPageTabs");
 const addDownloadPageBtn = document.getElementById("addDownloadPage");
+const openAdDebugBtn = document.getElementById("openAdDebug");
+const closeAdDebugBtn = document.getElementById("closeAdDebug");
+const adDebugModal = document.getElementById("adDebugModal");
+const adDebugUrlInput = document.getElementById("adDebugUrl");
+const loadAdDebugMetaBtn = document.getElementById("loadAdDebugMeta");
+const adDebugSearchInput = document.getElementById("adDebugSearch");
+const adDebugPrevBtn = document.getElementById("adDebugPrev");
+const adDebugNextBtn = document.getElementById("adDebugNext");
+const adDebugSearchStatus = document.getElementById("adDebugSearchStatus");
+const adDebugThresholdInput = document.getElementById("adDebugThreshold");
+const findAdSegmentsBtn = document.getElementById("findAdSegments");
+const durationSequenceInput = document.getElementById("durationSequence");
+const findDurationSequenceBtn = document.getElementById("findDurationSequence");
+const adDebugStatus = document.getElementById("adDebugStatus");
+const adDebugMetaEl = document.getElementById("adDebugMeta");
+const adDebugResultEl = document.getElementById("adDebugResult");
+
+let adDebugMetaText = "";
+let adDebugMeta = null;
+let adDebugSearchMatches = [];
+let adDebugSearchIndex = -1;
 
 let appState = {
   activePageId: "page-1",
@@ -195,6 +216,68 @@ function parseAdSegmentThreshold(value) {
   return Number.isFinite(threshold) && threshold > 0 ? threshold : 10;
 }
 
+function getSegmentFilename(url) {
+  const text = String(url || "").trim();
+  if (!text) {
+    return "";
+  }
+
+  try {
+    return new URL(text).pathname.split("/").pop() || "";
+  } catch (error) {
+    return text.split(/[?#]/)[0].split(/[\\/]/).pop() || "";
+  }
+}
+
+function extractSuspiciousAdFilenames(meta, adSegmentThreshold = 10) {
+  const threshold = parseAdSegmentThreshold(adSegmentThreshold);
+  const filenames = new Set();
+  if (!Array.isArray(meta)) {
+    return [];
+  }
+
+  for (const item of meta) {
+    const mediaParts = item && item.Playlist && Array.isArray(item.Playlist.MediaParts)
+      ? item.Playlist.MediaParts
+      : [];
+
+    for (const part of mediaParts) {
+      const segments = part && Array.isArray(part.MediaSegments) ? part.MediaSegments : [];
+      if (segments.length === 0 || segments.length >= threshold) {
+        continue;
+      }
+
+      for (const segment of segments) {
+        const filename = getSegmentFilename(segment && segment.Url);
+        if (filename) {
+          filenames.add(filename);
+        }
+      }
+    }
+  }
+
+  return [...filenames];
+}
+
+function getAllMediaSegments(meta) {
+  const segments = [];
+  if (!Array.isArray(meta)) {
+    return segments;
+  }
+
+  for (const item of meta) {
+    const mediaParts = item && item.Playlist && Array.isArray(item.Playlist.MediaParts)
+      ? item.Playlist.MediaParts
+      : [];
+    for (const part of mediaParts) {
+      if (part && Array.isArray(part.MediaSegments)) {
+        segments.push(...part.MediaSegments);
+      }
+    }
+  }
+  return segments;
+}
+
 function parseBatchInput(raw) {
   const lines = raw.split(/\r?\n/);
   const items = [];
@@ -273,6 +356,93 @@ function loadActivePageToDom() {
   refreshBatchPreview();
   renderTasks();
   setStatus("");
+}
+
+function setAdDebugStatus(message) {
+  adDebugStatus.textContent = message || "";
+}
+
+function renderAdDebugMeta(text) {
+  adDebugMetaEl.textContent = text || "";
+  adDebugMetaEl.scrollTop = 0;
+  adDebugSearchMatches = [];
+  adDebugSearchIndex = -1;
+  updateAdDebugSearchStatus();
+}
+
+function updateAdDebugSearchStatus() {
+  if (!adDebugSearchInput.value.trim()) {
+    adDebugSearchStatus.textContent = "";
+    return;
+  }
+  if (adDebugSearchMatches.length === 0) {
+    adDebugSearchStatus.textContent = "0/0";
+    return;
+  }
+  adDebugSearchStatus.textContent = `${adDebugSearchIndex + 1}/${adDebugSearchMatches.length}`;
+}
+
+function refreshAdDebugSearch() {
+  const query = adDebugSearchInput.value;
+  adDebugSearchMatches = [];
+  adDebugSearchIndex = -1;
+  if (!query || !adDebugMetaText) {
+    updateAdDebugSearchStatus();
+    return;
+  }
+
+  let index = adDebugMetaText.indexOf(query);
+  while (index !== -1) {
+    adDebugSearchMatches.push(index);
+    index = adDebugMetaText.indexOf(query, index + query.length);
+  }
+  if (adDebugSearchMatches.length > 0) {
+    adDebugSearchIndex = 0;
+    scrollAdDebugMetaToIndex(adDebugSearchMatches[adDebugSearchIndex]);
+  }
+  updateAdDebugSearchStatus();
+}
+
+function scrollAdDebugMetaToIndex(index) {
+  const before = adDebugMetaText.slice(0, index);
+  const line = before.split("\n").length - 1;
+  const totalLines = Math.max(1, adDebugMetaText.split("\n").length);
+  adDebugMetaEl.scrollTop = (line / totalLines) * adDebugMetaEl.scrollHeight;
+}
+
+function moveAdDebugSearch(step) {
+  if (adDebugSearchMatches.length === 0) {
+    updateAdDebugSearchStatus();
+    return;
+  }
+  adDebugSearchIndex = (adDebugSearchIndex + step + adDebugSearchMatches.length) % adDebugSearchMatches.length;
+  scrollAdDebugMetaToIndex(adDebugSearchMatches[adDebugSearchIndex]);
+  updateAdDebugSearchStatus();
+}
+
+function parseDurationSequence(value) {
+  return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+function findDurationSequence(meta, sequence) {
+  const segments = getAllMediaSegments(meta);
+  if (sequence.length === 0) {
+    return -1;
+  }
+
+  for (let i = 0; i <= segments.length - sequence.length; i += 1) {
+    let matched = true;
+    for (let j = 0; j < sequence.length; j += 1) {
+      if (String(segments[i + j] && segments[i + j].Duration) !== sequence[j]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 function renderDownloadPageTabs() {
@@ -454,6 +624,70 @@ stopAllBtn.addEventListener("click", async () => {
 tabMain.addEventListener("click", () => setActiveTab("main"));
 tabSettings.addEventListener("click", () => setActiveTab("settings"));
 addDownloadPageBtn.addEventListener("click", () => createDownloadPage());
+openAdDebugBtn.addEventListener("click", () => {
+  adDebugThresholdInput.value = adSegmentThresholdInput.value || "10";
+  adDebugModal.classList.remove("hidden");
+});
+closeAdDebugBtn.addEventListener("click", () => {
+  adDebugModal.classList.add("hidden");
+});
+loadAdDebugMetaBtn.addEventListener("click", async () => {
+  const url = adDebugUrlInput.value.trim();
+  if (!url) {
+    setAdDebugStatus("请输入 m3u8 地址");
+    return;
+  }
+
+  setAdDebugStatus("正在获取 meta_selected.json...");
+  adDebugResultEl.textContent = "";
+  const response = await window.api.debugAdMeta({
+    url,
+    exePath: exePathInput.value.trim(),
+    tempRoot: tempRootInput.value.trim()
+  });
+  if (!response.ok) {
+    setAdDebugStatus(response.message || "获取失败");
+    return;
+  }
+
+  adDebugMetaText = response.metaText || "";
+  adDebugMeta = JSON.parse(adDebugMetaText);
+  renderAdDebugMeta(JSON.stringify(adDebugMeta, null, 2));
+  adDebugMetaText = adDebugMetaEl.textContent;
+  setAdDebugStatus(`已获取：${response.metaPath}`);
+});
+adDebugSearchInput.addEventListener("input", refreshAdDebugSearch);
+adDebugPrevBtn.addEventListener("click", () => moveAdDebugSearch(-1));
+adDebugNextBtn.addEventListener("click", () => moveAdDebugSearch(1));
+findAdSegmentsBtn.addEventListener("click", () => {
+  if (!adDebugMeta) {
+    setAdDebugStatus("请先获取 meta_selected.json");
+    return;
+  }
+  const filenames = extractSuspiciousAdFilenames(adDebugMeta, adDebugThresholdInput.value);
+  adDebugResultEl.textContent = filenames.length
+    ? filenames.join("\n")
+    : "未发现匹配的疑似广告片段";
+});
+findDurationSequenceBtn.addEventListener("click", () => {
+  if (!adDebugMeta) {
+    setAdDebugStatus("请先获取 meta_selected.json");
+    return;
+  }
+  const sequence = parseDurationSequence(durationSequenceInput.value);
+  const index = findDurationSequence(adDebugMeta, sequence);
+  if (index === -1) {
+    adDebugResultEl.textContent = "未找到连续匹配的 duration 序列";
+    return;
+  }
+
+  const firstDuration = `\"Duration\": ${sequence[0]}`;
+  const metaIndex = adDebugMetaText.indexOf(firstDuration);
+  if (metaIndex !== -1) {
+    scrollAdDebugMetaToIndex(metaIndex);
+  }
+  adDebugResultEl.textContent = `找到连续匹配，起始 MediaSegments 索引：${index}`;
+});
 
 window.api.onTaskUpdate((event, payload) => {
   const page = appState.pages.find((item) => item.id === payload.pageId) || getActivePage();

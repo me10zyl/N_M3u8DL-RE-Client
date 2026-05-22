@@ -9,5 +9,6 @@ contextBridge.exposeInMainWorld("api", {
   cancelTask: () => ipcRenderer.invoke("tasks:cancel"),
   stopAll: () => ipcRenderer.invoke("tasks:stop-all"),
   removeTask: (id) => ipcRenderer.invoke("tasks:remove", id),
+  debugAdMeta: (payload) => ipcRenderer.invoke("ad-debug:meta", payload),
   onTaskUpdate: (handler) => ipcRenderer.on("task:update", handler)
 });
