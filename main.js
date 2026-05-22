@@ -1,8 +1,9 @@
-const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, net } = require("electron");
 const { spawn } = require("child_process");
 const iconv = require("iconv-lite");
 const fs = require("fs");
 const path = require("path");
+const { pathToFileURL } = require("url");
 
 let mainWindow;
 let currentProcess = null;
@@ -68,6 +69,10 @@ function createConfig(parsed = {}) {
     removeAds: parsed.removeAds !== false,
     useSystemProxy: parsed.useSystemProxy === true,
     adSegmentThreshold: normalizeAdSegmentThreshold(parsed.adSegmentThreshold),
+    adDebugUrl: parsed.adDebugUrl || "",
+    adDebugThreshold: normalizeAdSegmentThreshold(parsed.adDebugThreshold || parsed.adSegmentThreshold),
+    adDebugSearch: parsed.adDebugSearch || "",
+    adDebugDurationSequence: parsed.adDebugDurationSequence || "",
     activePageId: activePage.id,
     pages,
     showName: activePage.showName,
@@ -222,7 +227,8 @@ function formatCommand(exePath, args) {
 }
 
 function notifyTaskLog(task, message) {
-  if (task.silent) {
+  if (task.debugLog && mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send("ad-debug:log", message);
     return;
   }
   notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "log", message });
@@ -353,7 +359,8 @@ async function parseMetaSelected(task, parseTmpDir) {
   await fs.promises.rm(parseTmpDir, { recursive: true, force: true });
   ensureDir(parseTmpDir);
 
-  const parseArgs = buildDownloadArgs(task.url, parseTmpDir, parseTmpDir, task.saveName, ["--skip-download"]);
+  const extraArgs = ["--skip-download", "--use-system-proxy", task.useSystemProxy ? "true" : "false"];
+  const parseArgs = buildDownloadArgs(task.url, parseTmpDir, parseTmpDir, task.saveName, extraArgs);
   const code = await runDownloader(task, parseArgs);
   if (task.cancelled) {
     return null;
@@ -409,10 +416,7 @@ async function runNext() {
     ensureDir(task.tempShowDir);
     ensureDir(task.finalShowDir);
 
-    const extraArgs = [];
-    if (task.useSystemProxy) {
-      extraArgs.push("--use-system-proxy", "true");
-    }
+    const extraArgs = ["--use-system-proxy", task.useSystemProxy ? "true" : "false"];
 
     if (task.removeAds) {
       const adKeyword = await prepareAdKeyword(task);
@@ -466,6 +470,7 @@ ipcMain.handle("ad-debug:meta", async (event, payload) => {
   const storedConfig = readConfig();
   const exePath = (payload && payload.exePath) || storedConfig.exePath;
   const tempRoot = (payload && payload.tempRoot) || storedConfig.tempRoot;
+  const useSystemProxy = payload && "useSystemProxy" in payload ? payload.useSystemProxy === true : storedConfig.useSystemProxy === true;
   const url = (payload && payload.url || "").trim();
   if (!exePath || !tempRoot || !url) {
     return { ok: false, message: "请先填写 m3u8 地址，并配置程序路径和临时目录。" };
@@ -480,8 +485,9 @@ ipcMain.handle("ad-debug:meta", async (event, payload) => {
     pageId: "ad-debug",
     exePath,
     url,
+    useSystemProxy,
     saveName: "ad-debug",
-    silent: true
+    debugLog: true
   };
 
   try {
@@ -494,6 +500,33 @@ ipcMain.handle("ad-debug:meta", async (event, payload) => {
     return { ok: false, message: error.message };
   } finally {
     await fs.promises.rm(parseTmpDir, { recursive: true, force: true });
+  }
+});
+
+ipcMain.handle("ad-debug:preview", async (event, payload) => {
+  const storedConfig = readConfig();
+  const tempRoot = (payload && payload.tempRoot) || storedConfig.tempRoot;
+  const url = (payload && payload.url || "").trim();
+  const filename = (payload && payload.filename || getSegmentFilename(url) || "preview.ts").replace(/[\\/:*?"<>|]/g, "_");
+  if (!tempRoot || !url) {
+    return { ok: false, message: "缺少临时目录或 ts 下载链接。" };
+  }
+
+  const previewDir = path.join(tempRoot, "ad-debug-preview");
+  ensureDir(previewDir);
+  const targetPath = path.join(previewDir, `${Date.now()}-${filename}`);
+
+  try {
+    const response = await net.fetch(url);
+    if (!response.ok) {
+      return { ok: false, message: `下载失败：HTTP ${response.status}` };
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    await fs.promises.writeFile(targetPath, buffer);
+    return { ok: true, filePath: targetPath, fileUrl: pathToFileURL(targetPath).href };
+  } catch (error) {
+    return { ok: false, message: error.message };
   }
 });
 

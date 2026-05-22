@@ -41,6 +41,8 @@ const findDurationSequenceBtn = document.getElementById("findDurationSequence");
 const adDebugStatus = document.getElementById("adDebugStatus");
 const adDebugMetaEl = document.getElementById("adDebugMeta");
 const adDebugResultEl = document.getElementById("adDebugResult");
+const adDebugResultHintEl = document.getElementById("adDebugResultHint");
+const adDebugPreviewEl = document.getElementById("adDebugPreview");
 
 let adDebugMetaText = "";
 let adDebugMeta = null;
@@ -229,11 +231,11 @@ function getSegmentFilename(url) {
   }
 }
 
-function extractSuspiciousAdFilenames(meta, adSegmentThreshold = 10) {
+function extractSuspiciousAdSegments(meta, adSegmentThreshold = 10) {
   const threshold = parseAdSegmentThreshold(adSegmentThreshold);
-  const filenames = new Set();
+  const matches = [];
   if (!Array.isArray(meta)) {
-    return [];
+    return matches;
   }
 
   for (const item of meta) {
@@ -247,16 +249,22 @@ function extractSuspiciousAdFilenames(meta, adSegmentThreshold = 10) {
         continue;
       }
 
-      for (const segment of segments) {
+      segments.forEach((segment, index) => {
         const filename = getSegmentFilename(segment && segment.Url);
         if (filename) {
-          filenames.add(filename);
+          matches.push({
+            filename,
+            index,
+            duration: segment && segment.Duration,
+            groupSize: segments.length,
+            url: segment && segment.Url || ""
+          });
         }
-      }
+      });
     }
   }
 
-  return [...filenames];
+  return matches;
 }
 
 function getAllMediaSegments(meta) {
@@ -360,6 +368,46 @@ function loadActivePageToDom() {
 
 function setAdDebugStatus(message) {
   adDebugStatus.textContent = message || "";
+}
+
+function appendAdDebugLog(message) {
+  adDebugResultHintEl.classList.add("hidden");
+  adDebugResultEl.textContent = `${adDebugResultEl.textContent || ""}${message || ""}`;
+  adDebugResultEl.scrollTop = adDebugResultEl.scrollHeight;
+}
+
+function renderAdDebugSegmentResults(matches) {
+  adDebugResultEl.textContent = "";
+  adDebugResultHintEl.classList.remove("hidden");
+  if (matches.length === 0) {
+    adDebugResultEl.textContent = "未发现匹配的疑似广告片段";
+    return;
+  }
+
+  matches.forEach((match) => {
+    const link = document.createElement("a");
+    link.href = match.url;
+    link.textContent = `${match.filename} [${match.index}] [${match.duration}] [${match.groupSize}] [${match.url}]`;
+    link.addEventListener("click", async (event) => {
+      event.preventDefault();
+      setAdDebugStatus(`正在下载预览片段：${match.filename}`);
+      const response = await window.api.previewAdSegment({
+        url: match.url,
+        filename: match.filename,
+        tempRoot: tempRootInput.value.trim()
+      });
+      if (!response.ok) {
+        setAdDebugStatus(response.message || "预览片段下载失败");
+        return;
+      }
+      adDebugPreviewEl.src = response.fileUrl || response.filePath;
+      adDebugPreviewEl.classList.remove("hidden");
+      adDebugPreviewEl.play().catch(() => {});
+      setAdDebugStatus(`已下载预览片段：${response.filePath}`);
+    });
+    adDebugResultEl.appendChild(link);
+    adDebugResultEl.appendChild(document.createTextNode("\n"));
+  });
 }
 
 function renderAdDebugMeta(text) {
@@ -500,6 +548,10 @@ async function loadConfig() {
   removeAdsInput.checked = config.removeAds !== false;
   useSystemProxyInput.checked = config.useSystemProxy === true;
   adSegmentThresholdInput.value = String(parseAdSegmentThreshold(config.adSegmentThreshold));
+  adDebugUrlInput.value = config.adDebugUrl || "";
+  adDebugThresholdInput.value = String(parseAdSegmentThreshold(config.adDebugThreshold || config.adSegmentThreshold));
+  adDebugSearchInput.value = config.adDebugSearch || "";
+  durationSequenceInput.value = config.adDebugDurationSequence || "";
   loadActivePageToDom();
   renderDownloadPageTabs();
 }
@@ -513,6 +565,10 @@ async function saveConfig() {
     removeAds: removeAdsInput.checked,
     useSystemProxy: useSystemProxyInput.checked,
     adSegmentThreshold: parseAdSegmentThreshold(adSegmentThresholdInput.value),
+    adDebugUrl: adDebugUrlInput.value.trim(),
+    adDebugThreshold: parseAdSegmentThreshold(adDebugThresholdInput.value),
+    adDebugSearch: adDebugSearchInput.value,
+    adDebugDurationSequence: durationSequenceInput.value,
     activePageId: appState.activePageId,
     pages: appState.pages.map((page) => ({
       id: page.id,
@@ -625,7 +681,9 @@ tabMain.addEventListener("click", () => setActiveTab("main"));
 tabSettings.addEventListener("click", () => setActiveTab("settings"));
 addDownloadPageBtn.addEventListener("click", () => createDownloadPage());
 openAdDebugBtn.addEventListener("click", () => {
-  adDebugThresholdInput.value = adSegmentThresholdInput.value || "10";
+  if (!adDebugThresholdInput.value) {
+    adDebugThresholdInput.value = adSegmentThresholdInput.value || "10";
+  }
   adDebugModal.classList.remove("hidden");
 });
 closeAdDebugBtn.addEventListener("click", () => {
@@ -640,10 +698,14 @@ loadAdDebugMetaBtn.addEventListener("click", async () => {
 
   setAdDebugStatus("正在获取 meta_selected.json...");
   adDebugResultEl.textContent = "";
+  adDebugResultHintEl.classList.add("hidden");
+  adDebugPreviewEl.removeAttribute("src");
+  adDebugPreviewEl.classList.add("hidden");
   const response = await window.api.debugAdMeta({
     url,
     exePath: exePathInput.value.trim(),
-    tempRoot: tempRootInput.value.trim()
+    tempRoot: tempRootInput.value.trim(),
+    useSystemProxy: useSystemProxyInput.checked
   });
   if (!response.ok) {
     setAdDebugStatus(response.message || "获取失败");
@@ -656,7 +718,13 @@ loadAdDebugMetaBtn.addEventListener("click", async () => {
   adDebugMetaText = adDebugMetaEl.textContent;
   setAdDebugStatus(`已获取：${response.metaPath}`);
 });
-adDebugSearchInput.addEventListener("input", refreshAdDebugSearch);
+adDebugSearchInput.addEventListener("input", () => {
+  refreshAdDebugSearch();
+  saveConfig();
+});
+adDebugUrlInput.addEventListener("input", () => saveConfig());
+adDebugThresholdInput.addEventListener("input", () => saveConfig());
+durationSequenceInput.addEventListener("input", () => saveConfig());
 adDebugPrevBtn.addEventListener("click", () => moveAdDebugSearch(-1));
 adDebugNextBtn.addEventListener("click", () => moveAdDebugSearch(1));
 findAdSegmentsBtn.addEventListener("click", () => {
@@ -664,10 +732,8 @@ findAdSegmentsBtn.addEventListener("click", () => {
     setAdDebugStatus("请先获取 meta_selected.json");
     return;
   }
-  const filenames = extractSuspiciousAdFilenames(adDebugMeta, adDebugThresholdInput.value);
-  adDebugResultEl.textContent = filenames.length
-    ? filenames.join("\n")
-    : "未发现匹配的疑似广告片段";
+  const matches = extractSuspiciousAdSegments(adDebugMeta, adDebugThresholdInput.value);
+  renderAdDebugSegmentResults(matches);
 });
 findDurationSequenceBtn.addEventListener("click", () => {
   if (!adDebugMeta) {
@@ -687,6 +753,10 @@ findDurationSequenceBtn.addEventListener("click", () => {
     scrollAdDebugMetaToIndex(metaIndex);
   }
   adDebugResultEl.textContent = `找到连续匹配，起始 MediaSegments 索引：${index}`;
+});
+
+window.api.onAdDebugLog((event, message) => {
+  appendAdDebugLog(message);
 });
 
 window.api.onTaskUpdate((event, payload) => {

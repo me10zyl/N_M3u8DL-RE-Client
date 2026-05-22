@@ -146,7 +146,11 @@
         <div id="adDebugStatus" class="status"></div>
         <div class="ad-debug-content">
           <pre id="adDebugMeta" class="log meta-log"></pre>
-          <pre id="adDebugResult" class="log result-log"></pre>
+          <div class="ad-debug-side">
+            <div id="adDebugResultHint" class="ad-debug-result-hint hidden">格式：xxxx.ts [index号] [实际duration] [这个MediaSegments总共多大] [ts下载链接]</div>
+            <pre id="adDebugResult" class="log result-log"></pre>
+            <video id="adDebugPreview" class="ad-debug-preview hidden" controls></video>
+          </div>
         </div>
       </div>
     </div>
