@@ -44,7 +44,7 @@ function normalizePages(parsed = {}) {
 
 function normalizeAdSegmentThreshold(value) {
   const threshold = Number.parseInt(value, 10);
-  return Number.isFinite(threshold) && threshold > 0 ? threshold : 10;
+  return Number.isFinite(threshold) && threshold > 0 ? threshold : 5;
 }
 
 function createConfig(parsed = {}) {
@@ -68,6 +68,7 @@ function createConfig(parsed = {}) {
     removeAds: parsed.removeAds !== false,
     useSystemProxy: parsed.useSystemProxy === true,
     adSegmentThreshold: normalizeAdSegmentThreshold(parsed.adSegmentThreshold),
+    adDurationSequence: parsed.adDurationSequence || "",
     adDebugUrl: parsed.adDebugUrl || "",
     adDebugThreshold: normalizeAdSegmentThreshold(parsed.adDebugThreshold || parsed.adSegmentThreshold),
     adDebugSearch: parsed.adDebugSearch || "",
@@ -250,11 +251,76 @@ function getSegmentFilename(url) {
   }
 }
 
-function extractSuspiciousAdFilenames(meta, adSegmentThreshold = 10) {
+function getAllMediaSegments(meta) {
+  const segments = [];
+  if (!Array.isArray(meta)) {
+    return segments;
+  }
+
+  for (const item of meta) {
+    const mediaParts = item && item.Playlist && Array.isArray(item.Playlist.MediaParts)
+      ? item.Playlist.MediaParts
+      : [];
+    for (const part of mediaParts) {
+      if (part && Array.isArray(part.MediaSegments)) {
+        segments.push(...part.MediaSegments);
+      }
+    }
+  }
+  return segments;
+}
+
+function parseDurationSequence(value) {
+  return String(value || "")
+    .split(/[\s,，]+/)
+    .map((item) => Number.parseFloat(item.trim()))
+    .filter((item) => Number.isFinite(item));
+}
+
+function isSameDuration(left, right) {
+  return Math.abs(Number(left) - right) < 0.001;
+}
+
+function addFilename(filenames, segment) {
+  const filename = getSegmentFilename(segment && segment.Url);
+  if (filename) {
+    filenames.add(filename);
+  }
+}
+
+function addDurationSequenceFilenames(filenames, meta, durationSequence) {
+  const sequence = parseDurationSequence(durationSequence);
+  if (sequence.length === 0) {
+    return 0;
+  }
+
+  const segments = getAllMediaSegments(meta);
+  let count = 0;
+  for (let i = 0; i <= segments.length - sequence.length; i += 1) {
+    let matched = true;
+    for (let j = 0; j < sequence.length; j += 1) {
+      if (!isSameDuration(segments[i + j] && segments[i + j].Duration, sequence[j])) {
+        matched = false;
+        break;
+      }
+    }
+    if (!matched) {
+      continue;
+    }
+
+    for (let j = 0; j < sequence.length; j += 1) {
+      addFilename(filenames, segments[i + j]);
+    }
+    count += 1;
+  }
+  return count;
+}
+
+function extractSuspiciousAdFilenames(meta, adSegmentThreshold = 5, durationSequence = "", useSegmentThreshold = true) {
   const threshold = normalizeAdSegmentThreshold(adSegmentThreshold);
   const filenames = new Set();
   if (!Array.isArray(meta)) {
-    return [];
+    return { filenames: [], durationMatchCount: 0 };
   }
 
   for (const item of meta) {
@@ -264,20 +330,18 @@ function extractSuspiciousAdFilenames(meta, adSegmentThreshold = 10) {
 
     for (const part of mediaParts) {
       const segments = part && Array.isArray(part.MediaSegments) ? part.MediaSegments : [];
-      if (segments.length === 0 || segments.length >= threshold) {
+      if (!useSegmentThreshold || segments.length === 0 || segments.length >= threshold) {
         continue;
       }
 
       for (const segment of segments) {
-        const filename = getSegmentFilename(segment && segment.Url);
-        if (filename) {
-          filenames.add(filename);
-        }
+        addFilename(filenames, segment);
       }
     }
   }
 
-  return [...filenames];
+  const durationMatchCount = addDurationSequenceFilenames(filenames, meta, durationSequence);
+  return { filenames: [...filenames], durationMatchCount };
 }
 
 async function findNewestFile(rootDir, targetName) {
@@ -354,6 +418,30 @@ function runDownloader(task, args) {
   });
 }
 
+function runFfmpegFirstFrame(url, outputPath) {
+  return new Promise((resolve, reject) => {
+    const args = ["-y", "-ss", "0.1", "-i", url, "-frames:v", "1", "-f", "image2", outputPath];
+    const child = spawn("ffmpeg", args, { windowsHide: true });
+    let stderr = "";
+
+    child.stderr.on("data", (data) => {
+      stderr += decodeOutput(data);
+    });
+
+    child.on("error", (error) => {
+      reject(error);
+    });
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(stderr.trim() || `ffmpeg exited with code ${code}`));
+    });
+  });
+}
+
 async function parseMetaSelected(task, parseTmpDir) {
   await fs.promises.rm(parseTmpDir, { recursive: true, force: true });
   ensureDir(parseTmpDir);
@@ -389,8 +477,12 @@ async function prepareAdKeyword(task) {
   }
 
   const meta = JSON.parse(parsed.metaText);
-  const filenames = extractSuspiciousAdFilenames(meta, task.adSegmentThreshold);
+  const { filenames, durationMatchCount } = extractSuspiciousAdFilenames(meta, task.adSegmentThreshold, task.adDurationSequence, task.removeAds);
   await fs.promises.rm(parseTmpDir, { recursive: true, force: true });
+
+  if (durationMatchCount > 0) {
+    notifyTaskLog(task, `去广告解析：duration 序列匹配 ${durationMatchCount} 次，已加入对应分片。\n`);
+  }
 
   if (filenames.length === 0) {
     notifyTaskLog(task, "去广告解析完成：未发现可疑广告分片，将正常下载。\n");
@@ -417,7 +509,7 @@ async function runNext() {
 
     const extraArgs = ["--use-system-proxy", task.useSystemProxy ? "true" : "false"];
 
-    if (task.removeAds) {
+    if (task.removeAds || parseDurationSequence(task.adDurationSequence).length > 0) {
       const adKeyword = await prepareAdKeyword(task);
       if (task.cancelled) {
         notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "cancelled" });
@@ -465,6 +557,28 @@ async function runNext() {
   }
 }
 
+ipcMain.handle("ad-debug:first-frame", async (event, payload) => {
+  const storedConfig = readConfig();
+  const tempRoot = (payload && payload.tempRoot) || storedConfig.tempRoot;
+  const url = (payload && payload.url || "").trim();
+  if (!tempRoot || !url) {
+    return { ok: false, message: "缺少临时目录或片段 URL。" };
+  }
+
+  const frameTmpDir = path.join(tempRoot, `ad-debug-frame-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const framePath = path.join(frameTmpDir, "first-frame.png");
+  try {
+    ensureDir(frameTmpDir);
+    await runFfmpegFirstFrame(url, framePath);
+    const image = await fs.promises.readFile(framePath);
+    return { ok: true, imageUrl: `data:image/png;base64,${image.toString("base64")}` };
+  } catch (error) {
+    return { ok: false, message: error.message };
+  } finally {
+    await fs.promises.rm(frameTmpDir, { recursive: true, force: true });
+  }
+});
+
 ipcMain.handle("ad-debug:meta", async (event, payload) => {
   const storedConfig = readConfig();
   const exePath = (payload && payload.exePath) || storedConfig.exePath;
@@ -504,7 +618,7 @@ ipcMain.handle("ad-debug:meta", async (event, payload) => {
 
 
 ipcMain.handle("tasks:start", (event, payload) => {
-  let { exePath, tempRoot, finalRoot, showName, pageId, removeAds, useSystemProxy, adSegmentThreshold, items } = payload;
+  let { exePath, tempRoot, finalRoot, showName, pageId, removeAds, useSystemProxy, adSegmentThreshold, adDurationSequence, items } = payload;
   const normalizedShow = (showName || "").trim();
   const storedConfig = readConfig();
   exePath = exePath || storedConfig.exePath;
@@ -514,6 +628,7 @@ ipcMain.handle("tasks:start", (event, payload) => {
   removeAds = removeAds !== false;
   useSystemProxy = useSystemProxy === true;
   adSegmentThreshold = normalizeAdSegmentThreshold(adSegmentThreshold || storedConfig.adSegmentThreshold);
+  adDurationSequence = adDurationSequence || storedConfig.adDurationSequence || "";
   if (!exePath || !tempRoot || !finalRoot || !normalizedShow) {
     return { ok: false, message: "Missing required settings." };
   }
@@ -546,7 +661,8 @@ ipcMain.handle("tasks:start", (event, payload) => {
       saveName,
       removeAds,
       useSystemProxy,
-      adSegmentThreshold
+      adSegmentThreshold,
+      adDurationSequence
     });
   }
 

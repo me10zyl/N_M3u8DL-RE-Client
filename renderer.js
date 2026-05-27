@@ -5,6 +5,7 @@ const finalRootInput = document.getElementById("finalRoot");
 const removeAdsInput = document.getElementById("removeAds");
 const useSystemProxyInput = document.getElementById("useSystemProxy");
 const adSegmentThresholdInput = document.getElementById("adSegmentThreshold");
+const adDurationSequenceInput = document.getElementById("adDurationSequence");
 const batchInput = document.getElementById("batchInput");
 const startBtn = document.getElementById("startBtn");
 const cancelBtn = document.getElementById("cancelBtn");
@@ -30,9 +31,12 @@ const closeAdDebugBtn = document.getElementById("closeAdDebug");
 const adDebugModal = document.getElementById("adDebugModal");
 const adDebugUrlInput = document.getElementById("adDebugUrl");
 const loadAdDebugMetaBtn = document.getElementById("loadAdDebugMeta");
+const copyAdDebugMetaBtn = document.getElementById("copyAdDebugMeta");
 const adDebugSearchInput = document.getElementById("adDebugSearch");
 const adDebugPrevBtn = document.getElementById("adDebugPrev");
 const adDebugNextBtn = document.getElementById("adDebugNext");
+const adDebugTimeInput = document.getElementById("adDebugTime");
+const findAdDebugTimeBtn = document.getElementById("findAdDebugTime");
 const adDebugSearchStatus = document.getElementById("adDebugSearchStatus");
 const adDebugThresholdInput = document.getElementById("adDebugThreshold");
 const findAdSegmentsBtn = document.getElementById("findAdSegments");
@@ -215,7 +219,7 @@ function setActiveTab(tab) {
 
 function parseAdSegmentThreshold(value) {
   const threshold = Number.parseInt(value, 10);
-  return Number.isFinite(threshold) && threshold > 0 ? threshold : 10;
+  return Number.isFinite(threshold) && threshold > 0 ? threshold : 5;
 }
 
 function getSegmentFilename(url) {
@@ -231,7 +235,7 @@ function getSegmentFilename(url) {
   }
 }
 
-function extractSuspiciousAdSegments(meta, adSegmentThreshold = 10) {
+function extractSuspiciousAdSegments(meta, adSegmentThreshold = 5) {
   const threshold = parseAdSegmentThreshold(adSegmentThreshold);
   const matches = [];
   if (!Array.isArray(meta)) {
@@ -376,6 +380,25 @@ function appendAdDebugLog(message) {
   adDebugResultEl.scrollTop = adDebugResultEl.scrollHeight;
 }
 
+function clearAdDebugPreview() {
+  adDebugPreviewEl.removeAttribute("src");
+  adDebugPreviewEl.classList.add("hidden");
+}
+
+async function captureAdDebugFirstFrame(url) {
+  console.debug("[ad-debug] ffmpeg first frame start", { url });
+  const response = await window.api.debugAdFirstFrame({
+    url,
+    tempRoot: tempRootInput.value.trim()
+  });
+  if (!response.ok) {
+    console.error("[ad-debug] ffmpeg first frame failed", { url, response });
+    throw new Error(response.message || "截取片段首帧失败");
+  }
+  console.debug("[ad-debug] ffmpeg first frame success", { url });
+  return response.imageUrl;
+}
+
 function renderAdDebugSegmentResults(matches) {
   adDebugResultEl.textContent = "";
   adDebugResultHintEl.classList.remove("hidden");
@@ -388,12 +411,22 @@ function renderAdDebugSegmentResults(matches) {
     const link = document.createElement("a");
     link.href = match.url;
     link.textContent = `${match.filename} [${match.index}] [${match.duration}] [${match.groupSize}] [${match.url}]`;
-    link.addEventListener("click", (event) => {
+    link.addEventListener("click", async (event) => {
       event.preventDefault();
-      adDebugPreviewEl.src = match.url;
-      adDebugPreviewEl.classList.remove("hidden");
-      adDebugPreviewEl.play().catch(() => {});
-      setAdDebugStatus(`正在预览片段：${match.filename}`);
+      clearAdDebugPreview();
+      setAdDebugStatus(`正在截取片段首帧：${match.filename}`);
+      try {
+        adDebugPreviewEl.src = await captureAdDebugFirstFrame(match.url);
+        adDebugPreviewEl.classList.remove("hidden");
+        setAdDebugStatus(`已截取片段首帧：${match.filename}`);
+      } catch (error) {
+        console.error("[ad-debug] preview first frame failed", {
+          filename: match.filename,
+          url: match.url,
+          error
+        });
+        setAdDebugStatus(error.message || "截取片段首帧失败");
+      }
     });
     adDebugResultEl.appendChild(link);
     adDebugResultEl.appendChild(document.createTextNode("\n"));
@@ -449,6 +482,13 @@ function scrollAdDebugMetaToIndex(index) {
 }
 
 function moveAdDebugSearch(step) {
+  if (!adDebugSearchInput.value.trim()) {
+    updateAdDebugSearchStatus();
+    return;
+  }
+  if (adDebugSearchMatches.length === 0) {
+    refreshAdDebugSearch();
+  }
   if (adDebugSearchMatches.length === 0) {
     updateAdDebugSearchStatus();
     return;
@@ -459,28 +499,80 @@ function moveAdDebugSearch(step) {
 }
 
 function parseDurationSequence(value) {
-  return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  return value
+    .split(/[\s,，]+/)
+    .map((item) => Number.parseFloat(item.trim()))
+    .filter((item) => Number.isFinite(item));
+}
+
+function isSameDuration(left, right) {
+  return Math.abs(Number(left) - right) < 0.001;
 }
 
 function findDurationSequence(meta, sequence) {
   const segments = getAllMediaSegments(meta);
   if (sequence.length === 0) {
-    return -1;
+    return null;
   }
 
   for (let i = 0; i <= segments.length - sequence.length; i += 1) {
     let matched = true;
     for (let j = 0; j < sequence.length; j += 1) {
-      if (String(segments[i + j] && segments[i + j].Duration) !== sequence[j]) {
+      if (!isSameDuration(segments[i + j] && segments[i + j].Duration, sequence[j])) {
         matched = false;
         break;
       }
     }
     if (matched) {
-      return i;
+      return {
+        index: i,
+        segments: segments.slice(i, i + sequence.length)
+      };
     }
   }
-  return -1;
+  return null;
+}
+
+function parseAdDebugTime(value) {
+  const text = value.trim();
+  if (!text) {
+    return NaN;
+  }
+
+  const zhMatch = text.match(/^(?:(\d+(?:\.\d+)?)\s*分)?\s*(?:(\d+(?:\.\d+)?)\s*秒?)?$/);
+  if (zhMatch && (zhMatch[1] || zhMatch[2])) {
+    return Number(zhMatch[1] || 0) * 60 + Number(zhMatch[2] || 0);
+  }
+
+  const parts = text.split(":").map((part) => Number(part.trim()));
+  if (parts.length === 2 && parts.every((part) => Number.isFinite(part))) {
+    return parts[0] * 60 + parts[1];
+  }
+
+  const seconds = Number(text);
+  return Number.isFinite(seconds) ? seconds : NaN;
+}
+
+function findSegmentAtTime(meta, targetSeconds) {
+  const segments = getAllMediaSegments(meta);
+  let elapsed = 0;
+  for (let i = 0; i < segments.length; i += 1) {
+    const duration = Number(segments[i] && segments[i].Duration);
+    if (!Number.isFinite(duration) || duration < 0) {
+      continue;
+    }
+    const nextElapsed = elapsed + duration;
+    if (targetSeconds >= elapsed && targetSeconds < nextElapsed) {
+      return {
+        index: i,
+        segment: segments[i],
+        start: elapsed,
+        end: nextElapsed
+      };
+    }
+    elapsed = nextElapsed;
+  }
+  return null;
 }
 
 function renderDownloadPageTabs() {
@@ -538,6 +630,7 @@ async function loadConfig() {
   removeAdsInput.checked = config.removeAds !== false;
   useSystemProxyInput.checked = config.useSystemProxy === true;
   adSegmentThresholdInput.value = String(parseAdSegmentThreshold(config.adSegmentThreshold));
+  adDurationSequenceInput.value = config.adDurationSequence || "";
   adDebugUrlInput.value = config.adDebugUrl || "";
   adDebugThresholdInput.value = String(parseAdSegmentThreshold(config.adDebugThreshold || config.adSegmentThreshold));
   adDebugSearchInput.value = config.adDebugSearch || "";
@@ -555,6 +648,7 @@ async function saveConfig() {
     removeAds: removeAdsInput.checked,
     useSystemProxy: useSystemProxyInput.checked,
     adSegmentThreshold: parseAdSegmentThreshold(adSegmentThresholdInput.value),
+    adDurationSequence: adDurationSequenceInput.value,
     adDebugUrl: adDebugUrlInput.value.trim(),
     adDebugThreshold: parseAdSegmentThreshold(adDebugThresholdInput.value),
     adDebugSearch: adDebugSearchInput.value,
@@ -636,6 +730,7 @@ startBtn.addEventListener("click", async () => {
     removeAds: removeAdsInput.checked,
     useSystemProxy: useSystemProxyInput.checked,
     adSegmentThreshold,
+    adDurationSequence: adDurationSequenceInput.value,
     items: selectedItems
   });
 
@@ -672,7 +767,7 @@ tabSettings.addEventListener("click", () => setActiveTab("settings"));
 addDownloadPageBtn.addEventListener("click", () => createDownloadPage());
 openAdDebugBtn.addEventListener("click", () => {
   if (!adDebugThresholdInput.value) {
-    adDebugThresholdInput.value = adSegmentThresholdInput.value || "10";
+    adDebugThresholdInput.value = adSegmentThresholdInput.value || "5";
   }
   adDebugModal.classList.remove("hidden");
 });
@@ -689,8 +784,7 @@ loadAdDebugMetaBtn.addEventListener("click", async () => {
   setAdDebugStatus("正在获取 meta_selected.json...");
   adDebugResultEl.textContent = "";
   adDebugResultHintEl.classList.add("hidden");
-  adDebugPreviewEl.removeAttribute("src");
-  adDebugPreviewEl.classList.add("hidden");
+  clearAdDebugPreview();
   const response = await window.api.debugAdMeta({
     url,
     exePath: exePathInput.value.trim(),
@@ -712,11 +806,45 @@ adDebugSearchInput.addEventListener("input", () => {
   refreshAdDebugSearch();
   saveConfig();
 });
+copyAdDebugMetaBtn.addEventListener("click", async () => {
+  if (!adDebugMetaText) {
+    setAdDebugStatus("请先获取 meta_selected.json");
+    return;
+  }
+  await navigator.clipboard.writeText(adDebugMetaText);
+  setAdDebugStatus("已复制 meta_selected.json");
+});
+adDurationSequenceInput.addEventListener("input", () => saveConfig());
 adDebugUrlInput.addEventListener("input", () => saveConfig());
 adDebugThresholdInput.addEventListener("input", () => saveConfig());
 durationSequenceInput.addEventListener("input", () => saveConfig());
 adDebugPrevBtn.addEventListener("click", () => moveAdDebugSearch(-1));
 adDebugNextBtn.addEventListener("click", () => moveAdDebugSearch(1));
+findAdDebugTimeBtn.addEventListener("click", () => {
+  if (!adDebugMeta) {
+    setAdDebugStatus("请先获取 meta_selected.json");
+    return;
+  }
+
+  const targetSeconds = parseAdDebugTime(adDebugTimeInput.value);
+  if (!Number.isFinite(targetSeconds) || targetSeconds < 0) {
+    adDebugResultEl.textContent = "请输入有效时间，例如 1:23、1分23秒 或 83";
+    return;
+  }
+
+  const match = findSegmentAtTime(adDebugMeta, targetSeconds);
+  if (!match) {
+    adDebugResultEl.textContent = "未找到覆盖该时间点的片段";
+    return;
+  }
+
+  const segmentIndex = match.segment && match.segment.Index;
+  const metaIndex = adDebugMetaText.indexOf(`\"Index\": ${segmentIndex}`);
+  if (metaIndex !== -1) {
+    scrollAdDebugMetaToIndex(metaIndex);
+  }
+  adDebugResultEl.textContent = `找到时间点 ${targetSeconds}s，对应 MediaSegments 索引：${match.index}，片段 Index：${segmentIndex}，范围：${match.start.toFixed(3)}s - ${match.end.toFixed(3)}s`;
+});
 findAdSegmentsBtn.addEventListener("click", () => {
   if (!adDebugMeta) {
     setAdDebugStatus("请先获取 meta_selected.json");
@@ -731,18 +859,23 @@ findDurationSequenceBtn.addEventListener("click", () => {
     return;
   }
   const sequence = parseDurationSequence(durationSequenceInput.value);
-  const index = findDurationSequence(adDebugMeta, sequence);
-  if (index === -1) {
+  if (sequence.length === 0) {
+    adDebugResultEl.textContent = "请输入 duration 序列";
+    return;
+  }
+
+  const match = findDurationSequence(adDebugMeta, sequence);
+  if (!match) {
     adDebugResultEl.textContent = "未找到连续匹配的 duration 序列";
     return;
   }
 
-  const firstDuration = `\"Duration\": ${sequence[0]}`;
-  const metaIndex = adDebugMetaText.indexOf(firstDuration);
+  const firstSegmentIndex = match.segments[0] && match.segments[0].Index;
+  const metaIndex = adDebugMetaText.indexOf(`\"Index\": ${firstSegmentIndex}`);
   if (metaIndex !== -1) {
     scrollAdDebugMetaToIndex(metaIndex);
   }
-  adDebugResultEl.textContent = `找到连续匹配，起始 MediaSegments 索引：${index}`;
+  adDebugResultEl.textContent = `找到连续匹配，起始 MediaSegments 索引：${match.index}，片段 Index：${match.segments.map((segment) => segment.Index).join(", ")}`;
 });
 
 window.api.onAdDebugLog((event, message) => {

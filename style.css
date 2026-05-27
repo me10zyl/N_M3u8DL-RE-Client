@@ -374,6 +374,7 @@ textarea {
   max-height: 260px;
   border-radius: 12px;
   background: #000000;
+  object-fit: contain;
 }
 
 @media (max-width: 720px) {
