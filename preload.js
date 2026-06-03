@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld("api", {
   removeTask: (id) => ipcRenderer.invoke("tasks:remove", id),
   debugAdMeta: (payload) => ipcRenderer.invoke("ad-debug:meta", payload),
   debugAdFirstFrame: (payload) => ipcRenderer.invoke("ad-debug:first-frame", payload),
+  cmsRequest: (payload) => ipcRenderer.invoke("cms:request", payload),
+  openExternal: (url) => ipcRenderer.invoke("shell:open-external", url),
   onAdDebugLog: (handler) => ipcRenderer.on("ad-debug:log", handler),
   onTaskUpdate: (handler) => ipcRenderer.on("task:update", handler)
 });
