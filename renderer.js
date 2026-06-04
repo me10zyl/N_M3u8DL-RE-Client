@@ -2,6 +2,7 @@ const showNameInput = document.getElementById("showName");
 const exePathInput = document.getElementById("exePath");
 const tempRootInput = document.getElementById("tempRoot");
 const finalRootInput = document.getElementById("finalRoot");
+const defaultFinalRootInput = document.getElementById("defaultFinalRoot");
 const removeAdsInput = document.getElementById("removeAds");
 const useSystemProxyInput = document.getElementById("useSystemProxy");
 const adSegmentThresholdInput = document.getElementById("adSegmentThreshold");
@@ -15,9 +16,12 @@ const selectNoneBtn = document.getElementById("selectNone");
 const pickExeBtn = document.getElementById("pickExe");
 const pickTempBtn = document.getElementById("pickTemp");
 const pickFinalBtn = document.getElementById("pickFinal");
+const pickDefaultFinalRootBtn = document.getElementById("pickDefaultFinalRoot");
 const tabMain = document.getElementById("tabMain");
+const tabCms = document.getElementById("tabCms");
 const tabSettings = document.getElementById("tabSettings");
 const mainView = document.getElementById("mainView");
+const cmsView = document.getElementById("cmsView");
 const settingsView = document.getElementById("settingsView");
 const statusEl = document.getElementById("status");
 const batchStatusEl = document.getElementById("batchStatus");
@@ -55,6 +59,7 @@ let adDebugSearchIndex = -1;
 
 let appState = {
   activePageId: "page-1",
+  defaultFinalRoot: "",
   pages: []
 };
 
@@ -63,7 +68,7 @@ function createEmptyPage(index) {
     id: `page-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     title: `页面 ${index}`,
     showName: "",
-    finalRoot: "",
+    finalRoot: defaultFinalRootInput.value.trim(),
     batchInput: "",
     batchSelection: {},
     taskState: {},
@@ -76,7 +81,7 @@ function normalizePage(page, index) {
     id: page.id || `page-${index + 1}`,
     title: page.title || page.showName || `页面 ${index + 1}`,
     showName: page.showName || "",
-    finalRoot: page.finalRoot || "",
+    finalRoot: page.finalRoot || appState.defaultFinalRoot || "",
     batchInput: page.batchInput || "",
     batchSelection: page.batchSelection || {},
     taskState: page.taskState || {},
@@ -204,17 +209,14 @@ function renderBatchList(items) {
 }
 
 function setActiveTab(tab) {
-  if (tab === "settings") {
-    tabSettings.classList.add("active");
-    tabMain.classList.remove("active");
-    settingsView.classList.remove("hidden");
-    mainView.classList.add("hidden");
-  } else {
-    tabMain.classList.add("active");
-    tabSettings.classList.remove("active");
-    mainView.classList.remove("hidden");
-    settingsView.classList.add("hidden");
-  }
+  const activeTab = ["main", "cms", "settings"].includes(tab) ? tab : "main";
+  tabMain.classList.toggle("active", activeTab === "main" || activeTab === "settings");
+  tabCms.classList.toggle("active", activeTab === "cms");
+  tabSettings.classList.toggle("active", activeTab === "settings");
+
+  mainView.classList.toggle("hidden", activeTab !== "main");
+  cmsView.classList.toggle("hidden", activeTab !== "cms");
+  settingsView.classList.toggle("hidden", activeTab !== "settings");
 }
 
 function parseAdSegmentThreshold(value) {
@@ -619,6 +621,7 @@ async function loadConfig() {
 
   appState = {
     activePageId: config.activePageId || pages[0].id,
+    defaultFinalRoot: config.defaultFinalRoot || config.finalRoot || "",
     pages: pages.map(normalizePage)
   };
   if (!appState.pages.some((page) => page.id === appState.activePageId)) {
@@ -627,6 +630,12 @@ async function loadConfig() {
 
   exePathInput.value = config.exePath || "";
   tempRootInput.value = config.tempRoot || "";
+  defaultFinalRootInput.value = appState.defaultFinalRoot || "";
+  for (const page of appState.pages) {
+    if (!page.finalRoot) {
+      page.finalRoot = appState.defaultFinalRoot || "";
+    }
+  }
   removeAdsInput.checked = config.removeAds !== false;
   useSystemProxyInput.checked = config.useSystemProxy === true;
   adSegmentThresholdInput.value = String(parseAdSegmentThreshold(config.adSegmentThreshold));
@@ -645,6 +654,7 @@ async function saveConfig() {
   const nextConfig = {
     exePath: exePathInput.value.trim(),
     tempRoot: tempRootInput.value.trim(),
+    defaultFinalRoot: defaultFinalRootInput.value.trim(),
     removeAds: removeAdsInput.checked,
     useSystemProxy: useSystemProxyInput.checked,
     adSegmentThreshold: parseAdSegmentThreshold(adSegmentThresholdInput.value),
@@ -658,11 +668,11 @@ async function saveConfig() {
       id: page.id,
       title: page.title || page.showName || "页面",
       showName: page.showName || "",
-      finalRoot: page.finalRoot || "",
+      finalRoot: page.finalRoot || appState.defaultFinalRoot || "",
       batchInput: page.batchInput || ""
     })),
     showName: activePage.showName || "",
-    finalRoot: activePage.finalRoot || "",
+    finalRoot: activePage.finalRoot || defaultFinalRootInput.value.trim(),
     batchInput: activePage.batchInput || ""
   };
   await window.api.setConfig(nextConfig);
@@ -688,6 +698,18 @@ pickFinalBtn.addEventListener("click", async () => {
   const picked = await window.api.pickDir();
   if (picked) {
     finalRootInput.value = picked;
+    saveConfig();
+  }
+});
+
+pickDefaultFinalRootBtn.addEventListener("click", async () => {
+  const picked = await window.api.pickDir();
+  if (picked) {
+    defaultFinalRootInput.value = picked;
+    appState.defaultFinalRoot = picked;
+    if (!finalRootInput.value.trim()) {
+      finalRootInput.value = picked;
+    }
     saveConfig();
   }
 });
@@ -763,6 +785,7 @@ stopAllBtn.addEventListener("click", async () => {
 });
 
 tabMain.addEventListener("click", () => setActiveTab("main"));
+tabCms.addEventListener("click", () => setActiveTab("cms"));
 tabSettings.addEventListener("click", () => setActiveTab("settings"));
 addDownloadPageBtn.addEventListener("click", () => createDownloadPage());
 openAdDebugBtn.addEventListener("click", () => {
@@ -789,6 +812,7 @@ loadAdDebugMetaBtn.addEventListener("click", async () => {
     url,
     exePath: exePathInput.value.trim(),
     tempRoot: tempRootInput.value.trim(),
+    defaultFinalRoot: defaultFinalRootInput.value.trim(),
     useSystemProxy: useSystemProxyInput.checked
   });
   if (!response.ok) {
@@ -915,6 +939,10 @@ showNameInput.addEventListener("input", () => {
 });
 exePathInput.addEventListener("input", () => saveConfig());
 tempRootInput.addEventListener("input", () => saveConfig());
+defaultFinalRootInput.addEventListener("input", () => {
+  appState.defaultFinalRoot = defaultFinalRootInput.value.trim();
+  saveConfig();
+});
 finalRootInput.addEventListener("input", () => saveConfig());
 removeAdsInput.addEventListener("change", () => saveConfig());
 useSystemProxyInput.addEventListener("change", () => saveConfig());

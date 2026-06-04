@@ -7,110 +7,221 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <div class="app">
-      <header class="header">
-        <div>
-          <h1>N_m3u8DL-RE 客户端</h1>
-          <p>批量下载 m3u8，临时目录下载后移动到最终目录</p>
+    <div class="shell">
+      <aside class="sidebar" aria-label="主导航">
+        <div class="sidebar-brand">
+          <strong>N_m3u8DL-RE</strong>
+          <span>客户端</span>
         </div>
-        <div class="tab-actions">
-          <button id="tabMain" class="btn tab active">下载</button>
-          <button id="tabSettings" class="btn tab">设置</button>
+        <nav class="sidebar-nav">
+          <button id="tabMain" class="btn sidebar-tab active">下载</button>
+          <button id="tabCms" class="btn sidebar-tab">CMS 影片</button>
+        </nav>
+      </aside>
+
+      <main class="app">
+        <header class="header">
+          <div>
+            <h1>N_m3u8DL-RE 客户端</h1>
+            <p>批量下载 m3u8，临时目录下载后移动到最终目录</p>
+          </div>
+          <div class="tab-actions">
+            <button id="tabSettings" class="btn tab">下载设置</button>
+          </div>
+        </header>
+
+        <section id="mainView">
+          <section class="download-pages card">
+            <div id="downloadPageTabs" class="download-page-tabs"></div>
+            <button id="addDownloadPage" class="btn small">新增页面</button>
+          </section>
+
+          <section class="card">
+            <div class="grid">
+              <label class="field">
+                <span>电视剧名称</span>
+                <input id="showName" placeholder="例如：某某电视剧" />
+              </label>
+              <label class="field">
+                <span>最终目录</span>
+                <div class="row">
+                  <input id="finalRoot" placeholder="输出最终根目录" />
+                  <button id="pickFinal" class="btn">选择</button>
+                </div>
+              </label>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="field">
+              <span>批量链接（每行：第01集$https://url.m3u8）</span>
+              <textarea id="batchInput" rows="8" placeholder="第01集$https://url.m3u8"></textarea>
+            </div>
+            <div class="batch-actions">
+              <button id="selectAll" class="btn">全选</button>
+              <button id="selectNone" class="btn">全不选</button>
+              <span id="batchStatus" class="status"></span>
+            </div>
+            <div id="batchList" class="batch-list"></div>
+            <div class="actions">
+              <button id="startBtn" class="btn primary">开始下载</button>
+              <button id="cancelBtn" class="btn danger">停止当前任务</button>
+              <button id="stopAllBtn" class="btn danger">停止所有任务</button>
+              <span id="status" class="status"></span>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>任务列表</h2>
+            <div id="taskList" class="task-list"></div>
+          </section>
+
+          <section class="card">
+            <h2>日志</h2>
+            <pre id="log" class="log"></pre>
+          </section>
+        </section>
+
+        <section id="cmsView" class="hidden">
+          <section class="card cms-toolbar">
+            <div class="cms-toolbar-main">
+              <label class="field inline-field">
+                <span>资源站</span>
+                <select id="cmsSourceSelect"></select>
+              </label>
+              <label class="field inline-field">
+                <span>影片搜索</span>
+                <input id="cmsSearchInput" placeholder="搜索影片名称" />
+              </label>
+              <button id="cmsSearchBtn" class="btn primary">搜索</button>
+            </div>
+            <div class="cms-subnav">
+              <button class="btn tab active" data-cms-panel="list">影片列表</button>
+              <button class="btn tab" data-cms-panel="settings">CMS 设置</button>
+              <button class="btn tab" data-cms-panel="history">历史</button>
+              <button id="cmsDownloadQueueBtn" class="btn tab" data-cms-panel="downloads">下载中心</button>
+            </div>
+            <span id="cmsStatus" class="status"></span>
+          </section>
+
+          <section id="cmsListPanel" class="card cms-panel">
+            <div class="cms-category-row">
+              <button class="btn small active">全部</button>
+            </div>
+            <div id="cmsVideoGrid" class="cms-video-grid"></div>
+            <div class="cms-pagination">
+              <button class="btn small" disabled>上一页</button>
+              <span id="cmsPageInfo" class="status"></span>
+              <button class="btn small" disabled>下一页</button>
+            </div>
+          </section>
+
+          <section id="cmsSettingsPanel" class="card cms-panel hidden">
+            <h2>CMS 设置</h2>
+            <div class="grid">
+              <label class="field">
+                <span>接口名称</span>
+                <input id="cmsSourceName" placeholder="例如：非凡云" />
+              </label>
+              <label class="field">
+                <span>CMS 接口地址</span>
+                <input id="cmsSourceApiUrl" placeholder="https://example.com/provide/vod/" />
+              </label>
+              <label class="field checkbox-field">
+                <input id="cmsSourceEnabled" type="checkbox" checked />
+                <span>启用该资源站</span>
+              </label>
+            </div>
+            <div class="actions">
+              <button id="saveCmsSource" class="btn primary">保存资源站</button>
+              <button id="newCmsSource" class="btn">新增</button>
+              <button id="testCmsSource" class="btn">测试连接</button>
+              <span id="cmsSettingsStatus" class="status"></span>
+            </div>
+            <div id="cmsSourceList" class="task-list cms-source-list"></div>
+          </section>
+
+          <section id="cmsHistoryPanel" class="card cms-panel hidden">
+            <h2>历史</h2>
+            <p class="status">后续阶段将在这里展示刚刚点击过的影片。</p>
+          </section>
+
+          <section id="cmsDownloadsPanel" class="card cms-panel hidden">
+            <h2>下载中心</h2>
+            <p id="cmsDownloadSummary" class="status"></p>
+            <div id="cmsDownloadTaskList" class="task-list"></div>
+            <pre id="cmsDownloadLog" class="log"></pre>
+            <div class="actions">
+              <button id="cmsStopAllFromDetailBtn" class="btn danger">停止所有下载</button>
+            </div>
+          </section>
+
+          <div id="cmsDownloadPopover" class="cms-download-popover hidden">
+            <h2>待下载列表</h2>
+            <div id="cmsDownloadMiniList" class="task-list"></div>
+            <button id="openCmsDownloadDetailBtn" class="btn small">进入下载中心</button>
+          </div>
+        </section>
+
+        <section id="settingsView" class="hidden">
+          <section class="card">
+            <h2>下载设置</h2>
+            <div class="grid">
+              <label class="field">
+                <span>N_m3u8DL-RE 程序路径</span>
+                <div class="row">
+                  <input id="exePath" placeholder="选择 N_m3u8DL-RE.exe" />
+                  <button id="pickExe" class="btn">选择</button>
+                </div>
+              </label>
+              <label class="field">
+                <span>临时目录</span>
+                <div class="row">
+                  <input id="tempRoot" placeholder="下载临时根目录" />
+                  <button id="pickTemp" class="btn">选择</button>
+                </div>
+              </label>
+              <label class="field">
+                <span>默认下载目录</span>
+                <div class="row">
+                  <input id="defaultFinalRoot" placeholder="CMS 下载和新下载页面默认最终目录" />
+                  <button id="pickDefaultFinalRoot" class="btn">选择</button>
+                </div>
+              </label>
+              <label class="field checkbox-field">
+                <input id="removeAds" type="checkbox" />
+                <span>启用片段个数阈值去广告</span>
+              </label>
+              <label class="field checkbox-field">
+                <input id="useSystemProxy" type="checkbox" />
+                <span>使用系统代理（--use-system-proxy）</span>
+              </label>
+              <label class="field">
+                <span>疑似广告片段个数阈值</span>
+                <input id="adSegmentThreshold" type="number" min="1" step="1" value="5" />
+              </label>
+              <label class="field">
+                <span>去广告 duration 序列</span>
+                <textarea id="adDurationSequence" placeholder="匹配到该 duration 序列时，将对应 ts 加入去广告 keyword"></textarea>
+              </label>
+            </div>
+            <div class="actions">
+              <button id="openAdDebug" class="btn">调试去广告</button>
+              <button class="btn" type="button" onclick="document.getElementById('tabMain').click()">返回下载</button>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div id="cmsDownloadModal" class="modal hidden">
+      <div class="modal-panel">
+        <div class="modal-header">
+          <h2>CMS 下载详情</h2>
+          <button id="closeCmsDownloadModalBtn" class="btn small">关闭</button>
         </div>
-      </header>
-
-      <section id="mainView">
-        <section class="download-pages card">
-          <div id="downloadPageTabs" class="download-page-tabs"></div>
-          <button id="addDownloadPage" class="btn small">新增页面</button>
-        </section>
-
-        <section class="card">
-          <div class="grid">
-            <label class="field">
-              <span>电视剧名称</span>
-              <input id="showName" placeholder="例如：某某电视剧" />
-            </label>
-            <label class="field">
-              <span>最终目录</span>
-              <div class="row">
-                <input id="finalRoot" placeholder="输出最终根目录" />
-                <button id="pickFinal" class="btn">选择</button>
-              </div>
-            </label>
-          </div>
-        </section>
-
-        <section class="card">
-          <div class="field">
-            <span>批量链接（每行：第01集$https://url.m3u8）</span>
-            <textarea id="batchInput" rows="8" placeholder="第01集$https://url.m3u8"></textarea>
-          </div>
-          <div class="batch-actions">
-            <button id="selectAll" class="btn">全选</button>
-            <button id="selectNone" class="btn">全不选</button>
-            <span id="batchStatus" class="status"></span>
-          </div>
-          <div id="batchList" class="batch-list"></div>
-          <div class="actions">
-            <button id="startBtn" class="btn primary">开始下载</button>
-            <button id="cancelBtn" class="btn danger">停止当前任务</button>
-            <button id="stopAllBtn" class="btn danger">停止所有任务</button>
-            <span id="status" class="status"></span>
-          </div>
-        </section>
-
-        <section class="card">
-          <h2>任务列表</h2>
-          <div id="taskList" class="task-list"></div>
-        </section>
-
-        <section class="card">
-          <h2>日志</h2>
-          <pre id="log" class="log"></pre>
-        </section>
-      </section>
-
-      <section id="settingsView" class="hidden">
-        <section class="card">
-          <h2>下载设置</h2>
-          <div class="grid">
-            <label class="field">
-              <span>N_m3u8DL-RE 程序路径</span>
-              <div class="row">
-                <input id="exePath" placeholder="选择 N_m3u8DL-RE.exe" />
-                <button id="pickExe" class="btn">选择</button>
-              </div>
-            </label>
-            <label class="field">
-              <span>临时目录</span>
-              <div class="row">
-                <input id="tempRoot" placeholder="下载临时根目录" />
-                <button id="pickTemp" class="btn">选择</button>
-              </div>
-            </label>
-            <label class="field checkbox-field">
-              <input id="removeAds" type="checkbox" />
-              <span>启用片段个数阈值去广告</span>
-            </label>
-            <label class="field checkbox-field">
-              <input id="useSystemProxy" type="checkbox" />
-              <span>使用系统代理（--use-system-proxy）</span>
-            </label>
-            <label class="field">
-              <span>疑似广告片段个数阈值</span>
-              <input id="adSegmentThreshold" type="number" min="1" step="1" value="5" />
-            </label>
-            <label class="field">
-              <span>去广告 duration 序列</span>
-              <textarea id="adDurationSequence" placeholder="匹配到该 duration 序列时，将对应 ts 加入去广告 keyword"></textarea>
-            </label>
-          </div>
-          <div class="actions">
-            <button id="openAdDebug" class="btn">调试去广告</button>
-          </div>
-        </section>
-      </section>
+        <div id="cmsDownloadTaskListModal" class="task-list"></div>
+      </div>
     </div>
 
     <div id="adDebugModal" class="modal hidden">
@@ -166,5 +277,6 @@
     </div>
 
     <script src="renderer.js"></script>
+    <script src="cms-renderer.js"></script>
   </body>
 </html>

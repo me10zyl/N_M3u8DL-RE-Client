@@ -13,8 +13,61 @@ body {
   margin: 0;
 }
 
+.shell {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  height: 100vh;
+  padding: 28px 18px;
+  background: #263b2a;
+  color: #ffffff;
+}
+
+.sidebar-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 8px;
+}
+
+.sidebar-brand strong {
+  font-size: 18px;
+}
+
+.sidebar-brand span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn.sidebar-tab {
+  width: 100%;
+  justify-content: flex-start;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  text-align: left;
+}
+
+.btn.sidebar-tab.active {
+  background: #ffffff;
+  color: #263b2a;
+}
+
 .app {
-  max-width: 1100px;
+  width: min(1100px, 100%);
   margin: 0 auto;
   padding: 32px 24px 56px;
 }
@@ -377,10 +430,74 @@ textarea {
   object-fit: contain;
 }
 
+.cms-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cms-toolbar-main,
+.cms-subnav,
+.cms-category-row,
+.cms-pagination {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cms-toolbar-main {
+  align-items: flex-end;
+}
+
+.cms-video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 16px;
+  min-height: 180px;
+}
+
+.cms-placeholder {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  border: 1px dashed #d8cfc0;
+  border-radius: 14px;
+  background: #fbf8f2;
+  color: #7a6b53;
+}
+
+.cms-download-popover {
+  position: fixed;
+  right: 28px;
+  top: 88px;
+  z-index: 8;
+  width: 280px;
+  padding: 16px;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.18);
+}
+
 @media (max-width: 720px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    height: auto;
+  }
+
+  .sidebar-nav,
   .actions,
   .download-pages,
-  .ad-debug-toolbar {
+  .ad-debug-toolbar,
+  .cms-toolbar-main,
+  .cms-subnav,
+  .cms-category-row,
+  .cms-pagination {
     flex-direction: column;
     align-items: stretch;
   }
