@@ -449,6 +449,43 @@ textarea {
   align-items: flex-end;
 }
 
+.cms-console-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  color: #2f3d2d;
+  font-weight: 600;
+}
+
+.cms-console-card {
+  gap: 12px;
+}
+
+.cms-console-card.collapsed {
+  padding-bottom: 16px;
+}
+
+.cms-console-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.cms-console-badge {
+  color: #7a6b53;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.cms-console-log {
+  min-height: 120px;
+  white-space: pre-wrap;
+}
+
 .cms-video-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -466,6 +503,47 @@ textarea {
   border-radius: 14px;
   background: #fbf8f2;
   color: #7a6b53;
+}
+
+.cms-video-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 170px;
+  padding: 14px;
+  border: 1px solid #eadfce;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fffdf9, #f8f1e7);
+}
+
+.cms-video-card h3 {
+  margin: 0;
+  color: #2f3d2d;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.cms-video-remarks {
+  align-self: flex-start;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #355c3b;
+  color: #ffffff;
+  font-size: 12px;
+}
+
+.cms-video-summary,
+.cms-video-meta {
+  color: #675b48;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.cms-video-meta {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .cms-download-popover {

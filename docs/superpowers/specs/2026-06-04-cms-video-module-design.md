@@ -6,8 +6,8 @@
 
 参考项目为 [lhccong/fishTV](https://github.com/lhccong/fishTV)。fishTV 的 CMS 访问方式包括：
 
-- 列表：`/provide/vod/?ac=videolist&pg=1&pagesize=12&t=分类ID`
-- 搜索：`/provide/vod/?ac=videolist&wd=关键词`
+- 列表：`/provide/vod/?ac=list&pg=1&pagesize=12&t=分类ID`
+- 搜索：`/provide/vod/?ac=list&wd=关键词`
 - 详情：`/provide/vod/?ac=detail&ids=影片ID`
 - 多资源站切换：使用当前影片名在目标资源站搜索，并取匹配结果进入详情
 - 播放地址：通过 `vod_play_url` 按 `#` 拆集数，再按 `$` 拆集名和 URL
@@ -101,8 +101,8 @@ CMS 请求统一由主进程代理，renderer 不直接访问 CMS：
 默认支持以下接口：
 
 - 分类：`?ac=list`
-- 列表：`?ac=videolist&pg=<page>&pagesize=<size>&t=<typeId>`
-- 搜索：`?ac=videolist&wd=<keyword>&pg=<page>&pagesize=<size>`
+- 列表：`?ac=list&pg=<page>&pagesize=<size>&t=<typeId>`
+- 搜索：`?ac=list&wd=<keyword>&pg=<page>&pagesize=<size>`
 - 详情：`?ac=detail&ids=<vodId>`
 
 搜索请求不强制带分类 `t`，与 fishTV 保持一致。
@@ -230,7 +230,7 @@ https://example.com/api.php/provide/vod/
   ok: false,
   needsVerification: true,
   sourceId: "source-1",
-  url: "https://example.com/provide/vod/?ac=videolist",
+  url: "https://example.com/provide/vod/?ac=list",
   snippet: "..."
 }
 ```

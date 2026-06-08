@@ -104,15 +104,26 @@
             <span id="cmsStatus" class="status"></span>
           </section>
 
+          <section class="card cms-console-card collapsed" id="cmsConsoleCard">
+            <button id="toggleCmsConsoleBtn" class="cms-console-header btn" type="button" aria-expanded="false">
+              <span>CMS 控制台</span>
+              <span id="cmsConsoleBadge" class="cms-console-badge">点击展开查看请求响应</span>
+            </button>
+            <div class="cms-console-actions">
+              <button id="clearCmsConsole" class="btn small" type="button">清空</button>
+            </div>
+            <pre id="cmsConsole" class="log cms-console-log hidden"></pre>
+          </section>
+
           <section id="cmsListPanel" class="card cms-panel">
             <div class="cms-category-row">
               <button class="btn small active">全部</button>
             </div>
             <div id="cmsVideoGrid" class="cms-video-grid"></div>
             <div class="cms-pagination">
-              <button class="btn small" disabled>上一页</button>
+              <button id="cmsPrevPageBtn" class="btn small" disabled>上一页</button>
               <span id="cmsPageInfo" class="status"></span>
-              <button class="btn small" disabled>下一页</button>
+              <button id="cmsNextPageBtn" class="btn small" disabled>下一页</button>
             </div>
           </section>
 

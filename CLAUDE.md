@@ -112,7 +112,7 @@ Implemented so far:
 
 Not implemented yet:
 
-- Real Mac CMS API requests (`ac=list`, `ac=videolist`, `ac=detail`).
+- Real Mac CMS API requests (`ac=list`, `ac=list`, `ac=detail`).
 - CMS category/list/search/pagination rendering.
 - Verification BrowserWindow/Cookie handling.
 - Detail page playback and episode selection.

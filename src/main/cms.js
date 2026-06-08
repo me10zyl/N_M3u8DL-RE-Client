@@ -1,3 +1,9 @@
+const http = require("http");
+const https = require("https");
+
+const CMS_REQUEST_TIMEOUT_MS = 10000;
+const CMS_MAX_RESPONSE_BYTES = 1024 * 1024;
+
 function createId() {
   return `cms-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -64,8 +70,237 @@ function writeCmsConfig(store, cms) {
   });
 }
 
+function toSafeString(value, maxLength) {
+  const text = String(value || "").trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function normalizePage(value, fallback = 1) {
+  const page = Number.parseInt(value, 10);
+  if (!Number.isFinite(page) || page < 1) {
+    return fallback;
+  }
+  return Math.min(page, 1000);
+}
+
+function buildCmsSearchUrl(apiUrl, { keyword, page }) {
+  const url = new URL(apiUrl);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("仅支持 http/https 资源站地址。");
+  }
+
+  url.searchParams.set("ac", "videolist");
+  url.searchParams.set("pg", String(page));
+  const safeKeyword = String(keyword || "").trim();
+  if (safeKeyword) {
+    url.searchParams.set("wd", safeKeyword);
+  } else {
+    url.searchParams.delete("wd");
+  }
+  return url;
+}
+
+function getResponseHeaderSummary(headers = {}) {
+  const headerNames = ["content-type", "content-length", "server", "date", "location"];
+  return headerNames.reduce((summary, name) => {
+    if (headers[name]) {
+      summary[name] = headers[name];
+    }
+    return summary;
+  }, {});
+}
+
+function buildRawTextPreview(text) {
+  const maxPreviewLength = 6000;
+  return text.length > maxPreviewLength ? `${text.slice(0, maxPreviewLength)}\n... [truncated]` : text;
+}
+
+function buildJsonPreview(raw) {
+  try {
+    return JSON.stringify(raw, null, 2);
+  } catch (error) {
+    return "";
+  }
+}
+
+function fetchCmsJson(url, source) {
+  const client = url.protocol === "https:" ? https : http;
+  const headers = {
+    Accept: "application/json, text/plain;q=0.9, */*;q=0.8",
+    "User-Agent": source.userAgent || "N_m3u8DL-RE-Client CMS/1.0"
+  };
+  if (Array.isArray(source.cookies) && source.cookies.length > 0) {
+    headers.Cookie = source.cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finishReject = (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      reject(error);
+    };
+    const finishResolve = (value) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(value);
+    };
+    console.log('url invoke http GET:', url)
+    const request = client.get(url, { headers }, (response) => {
+      const responseMeta = {
+        statusCode: response.statusCode || 0,
+        contentType: String(response.headers["content-type"] || ""),
+        headers: getResponseHeaderSummary(response.headers),
+        bytes: 0,
+        rawTextPreview: "",
+        jsonPreview: ""
+      };
+
+
+      if (response.statusCode >= 300 && response.statusCode < 400) {
+        response.resume();
+        const error = new Error(`资源站返回重定向 HTTP ${response.statusCode}，已拒绝自动跳转。`);
+        error.responseMeta = responseMeta;
+        finishReject(error);
+        return;
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        response.resume();
+        const error = new Error(`资源站返回 HTTP ${response.statusCode}`);
+        error.responseMeta = responseMeta;
+        finishReject(error);
+        return;
+      }
+
+      // const contentType = responseMeta.contentType.toLowerCase();
+      // if (contentType && !contentType.includes("json") && !contentType.includes("text/plain")) {
+      //   response.resume();
+      //   const error = new Error("资源站返回非 JSON 响应。");
+      //   error.responseMeta = responseMeta;
+      //   finishReject(error);
+      //   return;
+      // }
+
+      const chunks = [];
+      let receivedBytes = 0;
+      response.on("data", (chunk) => {
+        console.log('http get response...')
+        if (settled) {
+          return;
+        }
+        receivedBytes += chunk.length;
+        responseMeta.bytes = receivedBytes;
+        if (receivedBytes > CMS_MAX_RESPONSE_BYTES) {
+          const error = new Error("资源站响应过大。");
+          error.responseMeta = responseMeta;
+          finishReject(error);
+          response.destroy();
+          request.destroy();
+          return;
+        }
+        chunks.push(chunk);
+      });
+      response.on("end", () => {
+        if (settled) {
+          return;
+        }
+        const text = Buffer.concat(chunks).toString("utf8").replace(/^﻿/, "");
+        responseMeta.rawTextPreview = buildRawTextPreview(text);
+        try {
+          const json = JSON.parse(text);
+          responseMeta.jsonPreview = buildJsonPreview(json);
+          finishResolve({
+            raw: json,
+            responseMeta
+          });
+        } catch (error) {
+          console.error(error)
+          const parseError = new Error("资源站返回非 JSON 响应。");
+          parseError.responseMeta = responseMeta;
+          finishReject(parseError);
+        }
+      });
+    });
+
+    request.setTimeout(CMS_REQUEST_TIMEOUT_MS, () => {
+      const error = new Error("CMS 请求超时。");
+      finishReject(error);
+      request.destroy();
+    });
+    request.on("error", finishReject);
+  });
+}
+
+
+function normalizeCmsVideo(item, sourceId) {
+  return {
+    id: toSafeString(item.vod_id || item.id, 64),
+    name: toSafeString(item.vod_name || item.name, 120),
+    type: toSafeString(item.type_name || item.type, 60),
+    year: toSafeString(item.vod_year || item.year, 20),
+    area: toSafeString(item.vod_area || item.area, 60),
+    actor: toSafeString(item.vod_actor || item.actor, 200),
+    director: toSafeString(item.vod_director || item.director, 120),
+    remarks: toSafeString(item.vod_remarks || item.remarks, 120),
+    pic: toSafeString(item.vod_pic || item.pic, 500),
+    sourceId
+  };
+}
+
+function normalizeCmsSearchResponse(raw, sourceId) {
+  const list = Array.isArray(raw.list) ? raw.list : [];
+  const items = list
+    .map((item) => normalizeCmsVideo(item || {}, sourceId))
+    .filter((item) => item.id || item.name);
+
+  return {
+    page: normalizePage(raw.page, 1),
+    pageCount: normalizePage(raw.pagecount || raw.pageCount, 1),
+    total: Number.parseInt(raw.total, 10) || items.length,
+    items
+  };
+}
+
 function registerCmsIpc(ipcMain, store) {
-  ipcMain.handle("cms:request", async () => ({ ok: false, placeholder: true, message: "CMS 占位 IPC 已可用，暂不执行完整 CMS 请求。" }));
+  ipcMain.handle("cms:request", async () => ({ ok: false, placeholder: true, message: "CMS 占位 IPC 已可用，请使用 cms:search 执行影片搜索。" }));
+
+  ipcMain.handle("cms:search", async (event, payload = {}) => {
+    try {
+      const cms = getCmsConfig(store.readConfig());
+      const source = cms.sources.find((item) => item.id === payload.sourceId);
+      if (!source) {
+        return { ok: false, message: "未找到选中的资源站，请重新选择。" };
+      }
+      if (source.enabled === false) {
+        return { ok: false, message: `资源站已禁用：${source.name}` };
+      }
+
+      const keyword = String(payload.keyword || "").trim();
+      const page = normalizePage(payload.page, 1);
+      const requestUrl = buildCmsSearchUrl(source.apiUrl, { keyword, page });
+      const rawResponse = await fetchCmsJson(requestUrl, source);
+      const normalized = normalizeCmsSearchResponse(rawResponse.raw, source.id);
+
+      return {
+        ok: true,
+        sourceId: source.id,
+        sourceName: source.name,
+        requestUrl: requestUrl.toString(),
+        response: rawResponse.responseMeta,
+        ...normalized
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+        response: error && error.responseMeta ? error.responseMeta : null
+      };
+    }
+  });
 
   ipcMain.handle("cms:sources:list", () => {
     const cms = getCmsConfig(store.readConfig());
