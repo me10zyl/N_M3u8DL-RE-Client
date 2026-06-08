@@ -486,6 +486,42 @@ textarea {
   white-space: pre-wrap;
 }
 
+.cms-category-row {
+  position: relative;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.cms-category-group {
+  position: relative;
+}
+
+.cms-category-submenu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 9;
+  display: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 220px;
+  max-width: 420px;
+  padding: 10px;
+  border: 1px solid #eadfce;
+  border-radius: 12px;
+  background: #fffdf9;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.14);
+}
+
+.cms-category-group:hover .cms-category-submenu,
+.cms-category-group:focus-within .cms-category-submenu {
+  display: flex;
+}
+
+.cms-category-child {
+  white-space: nowrap;
+}
+
 .cms-video-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -514,6 +550,14 @@ textarea {
   border: 1px solid #eadfce;
   border-radius: 14px;
   background: linear-gradient(180deg, #fffdf9, #f8f1e7);
+}
+
+.cms-video-poster {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 10px;
+  background: #ede5d8;
+  object-fit: cover;
 }
 
 .cms-video-card h3 {

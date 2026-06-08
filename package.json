@@ -5,7 +5,7 @@
   "main": "main.js",
   "type": "commonjs",
   "scripts": {
-    "start": "electron .",
+    "start": "electron . --disable-http-cach",
     "dist:win": "electron-builder -w",
     "dist": "electron-builder"
   },

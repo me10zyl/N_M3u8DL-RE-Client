@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("api", {
   debugAdMeta: (payload) => ipcRenderer.invoke("ad-debug:meta", payload),
   debugAdFirstFrame: (payload) => ipcRenderer.invoke("ad-debug:first-frame", payload),
   cmsListSources: () => ipcRenderer.invoke("cms:sources:list"),
+  cmsListCategories: (payload) => ipcRenderer.invoke("cms:categories", payload),
   cmsSaveSource: (payload) => ipcRenderer.invoke("cms:sources:save", payload),
   cmsDeleteSource: (id) => ipcRenderer.invoke("cms:sources:delete", id),
   cmsTestSource: (payload) => ipcRenderer.invoke("cms:sources:test", payload),

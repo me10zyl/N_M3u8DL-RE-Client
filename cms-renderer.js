@@ -1,6 +1,7 @@
 const cmsStatusEl = document.getElementById("cmsStatus");
 const cmsVideoGridEl = document.getElementById("cmsVideoGrid");
 const cmsSourceSelectEl = document.getElementById("cmsSourceSelect");
+const cmsCategoryRowEl = document.getElementById("cmsCategoryRow");
 const cmsSearchInputEl = document.getElementById("cmsSearchInput");
 const cmsSearchBtn = document.getElementById("cmsSearchBtn");
 const cmsPageInfoEl = document.getElementById("cmsPageInfo");
@@ -36,6 +37,14 @@ let cmsState = {
   editingSourceId: ""
 };
 let cmsSearchRequestId = 0;
+let cmsCategoriesRequestId = 0;
+let cmsCategoryTree = [];
+let cmsSelectedCategory = {
+  typeId: 0,
+  typeName: "全部",
+  parentTypeId: 0,
+  parentTypeName: ""
+};
 let cmsSearchState = {
   keyword: "",
   page: 1,
@@ -46,7 +55,7 @@ let cmsSearchState = {
 let isCmsConsoleCollapsed = true;
 let cmsConsoleUnreadCount = 0;
 
-function buildCmsSearchRequestUrl(source, { keyword, page }) {
+function buildCmsSearchRequestUrl(source, { keyword, page, typeId } = {}) {
   try {
     const url = new URL(source.apiUrl);
     url.searchParams.set("ac", "videolist");
@@ -56,10 +65,54 @@ function buildCmsSearchRequestUrl(source, { keyword, page }) {
     } else {
       url.searchParams.delete("wd");
     }
+    const safeTypeId = Number.parseInt(typeId, 10);
+    if (Number.isFinite(safeTypeId) && safeTypeId > 0) {
+      url.searchParams.set("t", String(safeTypeId));
+    } else {
+      url.searchParams.delete("t");
+    }
     return url.toString();
   } catch (error) {
     return "";
   }
+}
+
+function buildCmsCategoryRequestUrl(source) {
+  try {
+    const url = new URL(source.apiUrl);
+    url.searchParams.set("ac", "list");
+    url.searchParams.set("pg", "1");
+    return url.toString();
+  } catch (error) {
+    return "";
+  }
+}
+
+function setCmsCategorySelection(category) {
+  cmsSelectedCategory = {
+    typeId: Number.parseInt(category && category.typeId, 10) || 0,
+    typeName: category && category.typeName ? String(category.typeName) : "全部",
+    parentTypeId: Number.parseInt(category && category.parentTypeId, 10) || 0,
+    parentTypeName: category && category.parentTypeName ? String(category.parentTypeName) : ""
+  };
+}
+
+function getCategoryDisplayLabel(category) {
+  return category.typeName || "未命名分类";
+}
+
+function getSelectedCmsCategoryLabel() {
+  if (!cmsSelectedCategory.typeId) {
+    return "全部";
+  }
+  if (cmsSelectedCategory.parentTypeName) {
+    return `${cmsSelectedCategory.parentTypeName} / ${cmsSelectedCategory.typeName}`;
+  }
+  return cmsSelectedCategory.typeName;
+}
+
+function flattenCmsCategoryChildren(root) {
+  return Array.isArray(root.children) ? root.children : [];
 }
 
 function setCmsStatus(message) {
@@ -281,6 +334,15 @@ function renderCmsVideos(items) {
     const card = document.createElement("article");
     card.className = "cms-video-card";
 
+    if (item.pic) {
+      const poster = document.createElement("img");
+      poster.className = "cms-video-poster";
+      poster.src = item.pic;
+      poster.alt = item.name || "未命名影片";
+      poster.loading = "lazy";
+      card.appendChild(poster);
+    }
+
     const title = document.createElement("h3");
     title.textContent = item.name || "未命名影片";
 
@@ -309,7 +371,7 @@ function renderCmsVideos(items) {
   renderCmsPagination();
 }
 
-async function searchCmsVideos({ page = 1, keyword = cmsSearchInputEl.value.trim() } = {}) {
+async function searchCmsVideos({ page = 1, keyword = cmsSearchInputEl.value.trim(), typeId = cmsSelectedCategory.typeId } = {}) {
   const source = getSelectedCmsSource();
   if (!source) {
     const message = "未选择资源站，请先在 CMS 设置中新增资源站。";
@@ -329,7 +391,8 @@ async function searchCmsVideos({ page = 1, keyword = cmsSearchInputEl.value.trim
   const payload = {
     sourceId: source.id,
     keyword,
-    page
+    page,
+    typeId
   };
   setCmsPanel("list");
   setCmsStatus("正在发送 CMS 搜索请求...");
@@ -343,7 +406,8 @@ async function searchCmsVideos({ page = 1, keyword = cmsSearchInputEl.value.trim
     requestParams: {
       ac: "videolist",
       pg: payload.page,
-      ...(payload.keyword ? { wd: payload.keyword } : {})
+      ...(payload.keyword ? { wd: payload.keyword } : {}),
+      ...(Number.parseInt(payload.typeId, 10) > 0 ? { t: Number.parseInt(payload.typeId, 10) } : {})
     }
   });
 
@@ -354,7 +418,8 @@ async function searchCmsVideos({ page = 1, keyword = cmsSearchInputEl.value.trim
       requestParams: {
         ac: "videolist",
         pg: payload.page,
-        ...(payload.keyword ? { wd: payload.keyword } : {})
+        ...(payload.keyword ? { wd: payload.keyword } : {}),
+        ...(Number.parseInt(payload.typeId, 10) > 0 ? { t: Number.parseInt(payload.typeId, 10) } : {})
       }
     });
     appendCmsConsole("搜索响应摘要", {
@@ -384,7 +449,7 @@ async function searchCmsVideos({ page = 1, keyword = cmsSearchInputEl.value.trim
       total: response.total || 0,
       items: Array.isArray(response.items) ? response.items : []
     };
-    setCmsStatus(`搜索完成：共 ${cmsSearchState.total} 条。`);
+    setCmsStatus(`搜索完成：${getSelectedCmsCategoryLabel()}，共 ${cmsSearchState.total} 条。`);
     renderCmsVideos(cmsSearchState.items);
   } catch (error) {
     if (requestId !== cmsSearchRequestId) {
@@ -401,6 +466,107 @@ async function searchCmsVideos({ page = 1, keyword = cmsSearchInputEl.value.trim
   }
 }
 
+function renderCmsCategories(categoryTree) {
+  cmsCategoryRowEl.innerHTML = "";
+
+  const allButton = document.createElement("button");
+  allButton.className = `btn small${cmsSelectedCategory.typeId === 0 ? " active" : ""}`;
+  allButton.textContent = "全部";
+  allButton.addEventListener("click", () => {
+    setCmsCategorySelection({ typeId: 0, typeName: "全部", parentTypeId: 0, parentTypeName: "" });
+    renderCmsCategories(categoryTree);
+    searchCmsVideos({ page: 1, keyword: cmsSearchInputEl.value.trim(), typeId: 0 });
+  });
+  cmsCategoryRowEl.appendChild(allButton);
+
+  for (const root of categoryTree) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "cms-category-group";
+
+    const parentButton = document.createElement("button");
+    parentButton.className = `btn small cms-category-parent${cmsSelectedCategory.typeId === root.typeId || cmsSelectedCategory.parentTypeId === root.typeId ? " active" : ""}`;
+    parentButton.textContent = getCategoryDisplayLabel(root);
+    parentButton.addEventListener("click", () => {
+      setCmsCategorySelection({
+        typeId: root.typeId,
+        typeName: root.typeName,
+        parentTypeId: 0,
+        parentTypeName: ""
+      });
+      renderCmsCategories(categoryTree);
+      searchCmsVideos({ page: 1, keyword: cmsSearchInputEl.value.trim(), typeId: root.typeId });
+    });
+
+    wrapper.appendChild(parentButton);
+
+    if (flattenCmsCategoryChildren(root).length > 0) {
+      const submenu = document.createElement("div");
+      submenu.className = "cms-category-submenu";
+      for (const child of root.children) {
+        const childButton = document.createElement("button");
+        childButton.className = `btn small cms-category-child${cmsSelectedCategory.typeId === child.typeId ? " active" : ""}`;
+        childButton.textContent = getCategoryDisplayLabel(child);
+        childButton.addEventListener("click", () => {
+          setCmsCategorySelection({
+            typeId: child.typeId,
+            typeName: child.typeName,
+            parentTypeId: root.typeId,
+            parentTypeName: root.typeName
+          });
+          renderCmsCategories(categoryTree);
+          searchCmsVideos({ page: 1, keyword: cmsSearchInputEl.value.trim(), typeId: child.typeId });
+        });
+        submenu.appendChild(childButton);
+      }
+      wrapper.appendChild(submenu);
+    }
+
+    cmsCategoryRowEl.appendChild(wrapper);
+  }
+}
+
+async function loadCmsCategories() {
+  const source = getSelectedCmsSource();
+  if (!source) {
+    cmsCategoryTree = [];
+    renderCmsCategories(cmsCategoryTree);
+    return;
+  }
+  if (source.enabled === false) {
+    cmsCategoryTree = [];
+    renderCmsCategories(cmsCategoryTree);
+    return;
+  }
+
+  const requestId = cmsCategoriesRequestId + 1;
+  cmsCategoriesRequestId = requestId;
+  const requestUrl = buildCmsCategoryRequestUrl(source);
+  if (!requestUrl) {
+    renderCmsCategories([]);
+    return;
+  }
+
+  appendCmsConsole("加载分类", { sourceId: source.id, sourceName: source.name, requestUrl });
+  const response = await window.api.cmsListCategories({ sourceId: source.id });
+  appendCmsConsole("分类响应", {
+    ok: response.ok,
+    requestUrl: response.requestUrl,
+    categoryCount: Array.isArray(response.categories) ? response.categories.length : 0
+  });
+  appendCmsHttpResponseToConsole(response.response);
+  if (requestId !== cmsCategoriesRequestId) {
+    return;
+  }
+  if (!response.ok) {
+    setCmsStatus(response.message || "加载分类失败");
+    renderCmsCategories([]);
+    return;
+  }
+
+  cmsCategoryTree = Array.isArray(response.categories) ? response.categories : [];
+  renderCmsCategories(cmsCategoryTree);
+}
+
 async function loadCmsSources() {
   const response = await window.api.cmsListSources();
   if (!response.ok) {
@@ -415,9 +581,10 @@ async function loadCmsSources() {
   renderCmsSourceSelect();
   renderCmsSourceList();
   renderCmsPlaceholder();
+  await loadCmsCategories();
   if (cmsState.sources.some((source) => source.enabled !== false)) {
     setCmsStatus("CMS 设置已加载，正在加载首页影片...");
-    await searchCmsVideos({ page: 1, keyword: "" });
+    await searchCmsVideos({ page: 1, keyword: "", typeId: 0 });
     return;
   }
   setCmsStatus("请先在 CMS 设置中新增资源站。 ");
@@ -474,23 +641,25 @@ toggleCmsConsoleBtn.addEventListener("click", () => {
 });
 
 cmsSearchBtn.addEventListener("click", () => {
-  searchCmsVideos({ page: 1, keyword: cmsSearchInputEl.value.trim() });
+  searchCmsVideos({ page: 1, keyword: cmsSearchInputEl.value.trim(), typeId: cmsSelectedCategory.typeId });
 });
 
 cmsSourceSelectEl.addEventListener("change", () => {
   const source = getSelectedCmsSource();
   appendCmsConsole("切换资源站", source || "未选择资源站");
   if (source && source.enabled !== false) {
-    searchCmsVideos({ page: 1, keyword: cmsSearchInputEl.value.trim() });
+    setCmsCategorySelection({ typeId: 0, typeName: "全部", parentTypeId: 0, parentTypeName: "" });
+    loadCmsCategories();
+    searchCmsVideos({ page: 1, keyword: cmsSearchInputEl.value.trim(), typeId: 0 });
   }
 });
 
 cmsPrevPageBtn.addEventListener("click", () => {
-  searchCmsVideos({ page: Math.max(1, cmsSearchState.page - 1), keyword: cmsSearchState.keyword });
+  searchCmsVideos({ page: Math.max(1, cmsSearchState.page - 1), keyword: cmsSearchState.keyword, typeId: cmsSelectedCategory.typeId });
 });
 
 cmsNextPageBtn.addEventListener("click", () => {
-  searchCmsVideos({ page: cmsSearchState.page + 1, keyword: cmsSearchState.keyword });
+  searchCmsVideos({ page: cmsSearchState.page + 1, keyword: cmsSearchState.keyword, typeId: cmsSelectedCategory.typeId });
 });
 
 cmsSearchInputEl.addEventListener("keydown", (event) => {

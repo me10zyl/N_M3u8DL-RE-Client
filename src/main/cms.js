@@ -83,7 +83,7 @@ function normalizePage(value, fallback = 1) {
   return Math.min(page, 1000);
 }
 
-function buildCmsSearchUrl(apiUrl, { keyword, page }) {
+function buildCmsSearchUrl(apiUrl, { keyword, page, typeId }) {
   const url = new URL(apiUrl);
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("仅支持 http/https 资源站地址。");
@@ -96,6 +96,12 @@ function buildCmsSearchUrl(apiUrl, { keyword, page }) {
     url.searchParams.set("wd", safeKeyword);
   } else {
     url.searchParams.delete("wd");
+  }
+  const safeTypeId = Number.parseInt(typeId, 10);
+  if (Number.isFinite(safeTypeId) && safeTypeId > 0) {
+    url.searchParams.set("t", String(safeTypeId));
+  } else {
+    url.searchParams.delete("t");
   }
   return url;
 }
@@ -149,7 +155,6 @@ function fetchCmsJson(url, source) {
       settled = true;
       resolve(value);
     };
-    console.log('url invoke http GET:', url)
     const request = client.get(url, { headers }, (response) => {
       const responseMeta = {
         statusCode: response.statusCode || 0,
@@ -159,7 +164,6 @@ function fetchCmsJson(url, source) {
         rawTextPreview: "",
         jsonPreview: ""
       };
-
 
       if (response.statusCode >= 300 && response.statusCode < 400) {
         response.resume();
@@ -176,19 +180,9 @@ function fetchCmsJson(url, source) {
         return;
       }
 
-      // const contentType = responseMeta.contentType.toLowerCase();
-      // if (contentType && !contentType.includes("json") && !contentType.includes("text/plain")) {
-      //   response.resume();
-      //   const error = new Error("资源站返回非 JSON 响应。");
-      //   error.responseMeta = responseMeta;
-      //   finishReject(error);
-      //   return;
-      // }
-
       const chunks = [];
       let receivedBytes = 0;
       response.on("data", (chunk) => {
-        console.log('http get response...')
         if (settled) {
           return;
         }
@@ -218,7 +212,6 @@ function fetchCmsJson(url, source) {
             responseMeta
           });
         } catch (error) {
-          console.error(error)
           const parseError = new Error("资源站返回非 JSON 响应。");
           parseError.responseMeta = responseMeta;
           finishReject(parseError);
@@ -235,7 +228,6 @@ function fetchCmsJson(url, source) {
   });
 }
 
-
 function normalizeCmsVideo(item, sourceId) {
   return {
     id: toSafeString(item.vod_id || item.id, 64),
@@ -249,6 +241,50 @@ function normalizeCmsVideo(item, sourceId) {
     pic: toSafeString(item.vod_pic || item.pic, 500),
     sourceId
   };
+}
+
+function normalizeCategory(item) {
+  const typeId = Number.parseInt(item.type_id, 10);
+  const typePid = Number.parseInt(item.type_pid, 10);
+  const typeName = toSafeString(item.type_name, 120);
+  if (!Number.isFinite(typeId) || !typeName) {
+    return null;
+  }
+  return {
+    typeId,
+    typePid: Number.isFinite(typePid) ? typePid : 0,
+    typeName
+  };
+}
+
+function buildCategoryTree(categories) {
+  const map = new Map();
+  for (const category of categories) {
+    map.set(category.typeId, {
+      ...category,
+      children: []
+    });
+  }
+
+  const roots = [];
+  for (const category of map.values()) {
+    if (category.typePid > 0 && map.has(category.typePid)) {
+      map.get(category.typePid).children.push(category);
+      continue;
+    }
+    roots.push(category);
+  }
+
+  roots.sort((left, right) => left.typeId - right.typeId);
+  for (const root of roots) {
+    root.children.sort((left, right) => left.typeId - right.typeId);
+  }
+  return roots;
+}
+
+function parseCategoryResponse(raw) {
+  const categories = Array.isArray(raw.class) ? raw.class.map(normalizeCategory).filter(Boolean) : [];
+  return buildCategoryTree(categories);
 }
 
 function normalizeCmsSearchResponse(raw, sourceId) {
@@ -281,7 +317,8 @@ function registerCmsIpc(ipcMain, store) {
 
       const keyword = String(payload.keyword || "").trim();
       const page = normalizePage(payload.page, 1);
-      const requestUrl = buildCmsSearchUrl(source.apiUrl, { keyword, page });
+      const typeId = payload.typeId;
+      const requestUrl = buildCmsSearchUrl(source.apiUrl, { keyword, page, typeId });
       const rawResponse = await fetchCmsJson(requestUrl, source);
       const normalized = normalizeCmsSearchResponse(rawResponse.raw, source.id);
 
@@ -292,6 +329,39 @@ function registerCmsIpc(ipcMain, store) {
         requestUrl: requestUrl.toString(),
         response: rawResponse.responseMeta,
         ...normalized
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+        response: error && error.responseMeta ? error.responseMeta : null
+      };
+    }
+  });
+
+  ipcMain.handle("cms:categories", async (event, payload = {}) => {
+    try {
+      const cms = getCmsConfig(store.readConfig());
+      const source = cms.sources.find((item) => item.id === payload.sourceId);
+      if (!source) {
+        return { ok: false, message: "未找到选中的资源站，请重新选择。" };
+      }
+      if (source.enabled === false) {
+        return { ok: false, message: `资源站已禁用：${source.name}` };
+      }
+
+      const requestUrl = new URL(source.apiUrl);
+      requestUrl.searchParams.set("ac", "list");
+      requestUrl.searchParams.set("pg", "1");
+      const rawResponse = await fetchCmsJson(requestUrl, source);
+      const categories = parseCategoryResponse(rawResponse.raw);
+      return {
+        ok: true,
+        sourceId: source.id,
+        sourceName: source.name,
+        requestUrl: requestUrl.toString(),
+        response: rawResponse.responseMeta,
+        categories
       };
     } catch (error) {
       return {
