@@ -106,6 +106,23 @@ function buildCmsSearchUrl(apiUrl, { keyword, page, typeId }) {
   return url;
 }
 
+function buildCmsDetailUrl(apiUrl, { id, typeId }) {
+  const url = new URL(apiUrl);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("仅支持 http/https 资源站地址。");
+  }
+
+  url.searchParams.set("ac", "detail");
+  if (id) {
+    url.searchParams.set("ids", String(id));
+  }
+  const safeTypeId = Number.parseInt(typeId, 10);
+  if (Number.isFinite(safeTypeId) && safeTypeId > 0) {
+    url.searchParams.set("t", String(safeTypeId));
+  }
+  return url;
+}
+
 function getResponseHeaderSummary(headers = {}) {
   const headerNames = ["content-type", "content-length", "server", "date", "location"];
   return headerNames.reduce((summary, name) => {
@@ -232,15 +249,79 @@ function normalizeCmsVideo(item, sourceId) {
   return {
     id: toSafeString(item.vod_id || item.id, 64),
     name: toSafeString(item.vod_name || item.name, 120),
+    typeId: Number.parseInt(item.type_id || item.typeId, 10) || 0,
     type: toSafeString(item.type_name || item.type, 60),
     year: toSafeString(item.vod_year || item.year, 20),
     area: toSafeString(item.vod_area || item.area, 60),
+    lang: toSafeString(item.vod_lang || item.lang, 60),
     actor: toSafeString(item.vod_actor || item.actor, 200),
     director: toSafeString(item.vod_director || item.director, 120),
     remarks: toSafeString(item.vod_remarks || item.remarks, 120),
     pic: toSafeString(item.vod_pic || item.pic, 500),
     sourceId
   };
+}
+
+function parseVodPlaySources(value) {
+  const sourceText = String(value || "").trim();
+  if (!sourceText) {
+    return [];
+  }
+
+  return sourceText
+    .split("$$$")
+    .map((group) => {
+      const parts = String(group || "").split("$$");
+      const sourceName = toSafeString(parts[0], 80) || "默认线路";
+      const episodes = String(parts[1] || "")
+        .split("#")
+        .map((episode) => {
+          const [name, url] = String(episode || "").split("$");
+          const safeUrl = String(url || "").trim();
+          if (!safeUrl) {
+            return null;
+          }
+          return {
+            name: toSafeString(name, 120) || safeUrl,
+            url: safeUrl
+          };
+        })
+        .filter(Boolean);
+
+      if (!episodes.length) {
+        return null;
+      }
+
+      return {
+        sourceName,
+        episodes
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeCmsVideoDetail(item, sourceId) {
+  const base = normalizeCmsVideo(item, sourceId);
+  return {
+    ...base,
+    content: toSafeString(item.vod_content || item.content, 5000),
+    updateTime: toSafeString(item.vod_time || item.update_time || item.time, 40),
+    score: toSafeString(item.vod_score || item.score, 20),
+    total: toSafeString(item.vod_total || item.total, 20),
+    serial: toSafeString(item.vod_serial || item.serial, 40),
+    playFrom: toSafeString(item.vod_play_from, 500),
+    playUrl: toSafeString(item.vod_play_url, 5000),
+    playSources: parseVodPlaySources(item.vod_play_url)
+  };
+}
+
+function normalizeCmsDetailResponse(raw, sourceId, videoId) {
+  const list = Array.isArray(raw.list) ? raw.list : [];
+  const detailItem = list.find((item) => String(item && (item.vod_id || item.id || "")) === String(videoId || "")) || list[0] || null;
+  if (!detailItem) {
+    return null;
+  }
+  return normalizeCmsVideoDetail(detailItem, sourceId);
 }
 
 function normalizeCategory(item) {
@@ -329,6 +410,45 @@ function registerCmsIpc(ipcMain, store) {
         requestUrl: requestUrl.toString(),
         response: rawResponse.responseMeta,
         ...normalized
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+        response: error && error.responseMeta ? error.responseMeta : null
+      };
+    }
+  });
+
+  ipcMain.handle("cms:detail", async (event, payload = {}) => {
+    try {
+      const cms = getCmsConfig(store.readConfig());
+      const source = cms.sources.find((item) => item.id === payload.sourceId);
+      if (!source) {
+        return { ok: false, message: "未找到选中的资源站，请重新选择。" };
+      }
+      if (source.enabled === false) {
+        return { ok: false, message: `资源站已禁用：${source.name}` };
+      }
+
+      const videoId = String(payload.id || "").trim();
+      if (!videoId) {
+        return { ok: false, message: "缺少影片 ID。" };
+      }
+      const requestUrl = buildCmsDetailUrl(source.apiUrl, { id: videoId, typeId: payload.typeId });
+      const rawResponse = await fetchCmsJson(requestUrl, source);
+      const detail = normalizeCmsDetailResponse(rawResponse.raw, source.id, videoId);
+      if (!detail) {
+        return { ok: false, message: "未找到影片详情。", requestUrl: requestUrl.toString(), response: rawResponse.responseMeta };
+      }
+
+      return {
+        ok: true,
+        sourceId: source.id,
+        sourceName: source.name,
+        requestUrl: requestUrl.toString(),
+        response: rawResponse.responseMeta,
+        detail
       };
     } catch (error) {
       return {

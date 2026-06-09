@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld("api", {
   cmsDeleteSource: (id) => ipcRenderer.invoke("cms:sources:delete", id),
   cmsTestSource: (payload) => ipcRenderer.invoke("cms:sources:test", payload),
   cmsSearch: (payload) => ipcRenderer.invoke("cms:search", payload),
+  cmsDetail: (payload) => ipcRenderer.invoke("cms:detail", payload),
   onAdDebugLog: (handler) => ipcRenderer.on("ad-debug:log", handler),
   onTaskUpdate: (handler) => ipcRenderer.on("task:update", handler)
 });
