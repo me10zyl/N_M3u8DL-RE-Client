@@ -1,0 +1,1 @@
+pnpm run dist:win 

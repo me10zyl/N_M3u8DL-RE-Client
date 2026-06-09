@@ -39,18 +39,19 @@ function normalizePages(parsed = {}) {
 }
 
 function createConfig(app, parsed = {}) {
-  const defaultExe = path.join(app.getAppPath(), "bin", "N_m3u8DL-RE.exe");
-  const fallbackExe = path.join(process.resourcesPath, "bin", "N_m3u8DL-RE.exe");
-  const defaultTempRoot = path.join(app.getAppPath(), "tmp");
-  const defaultFinalRoot = parsed.defaultFinalRoot || parsed.finalRoot || "";
+  const resourcesRoot = process.resourcesPath || app.getAppPath();
+  const bundledExe = path.join(resourcesRoot, "bin", "N_m3u8DL-RE.exe");
+  const devExe = path.join(app.getAppPath(), "bin", "N_m3u8DL-RE.exe");
+  const defaultTempRoot = path.join(resourcesRoot, "tmp");
+  const defaultFinalRoot = parsed.defaultFinalRoot || parsed.finalRoot || path.join(resourcesRoot, "target");
   const exeCandidate = parsed.exePath || "";
   const resolvedExe = fs.existsSync(exeCandidate)
     ? exeCandidate
-    : fs.existsSync(defaultExe)
-    ? defaultExe
-    : fs.existsSync(fallbackExe)
-    ? fallbackExe
-    : "";
+    : fs.existsSync(bundledExe)
+    ? bundledExe
+    : fs.existsSync(devExe)
+    ? devExe
+    : bundledExe;
   const pages = normalizePages({ ...parsed, defaultFinalRoot });
   const activePage = pages.find((page) => page.id === parsed.activePageId) || pages[0];
   const parsedCms = parsed.cms && typeof parsed.cms === "object" ? parsed.cms : {};
