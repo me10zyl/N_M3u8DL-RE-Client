@@ -616,13 +616,14 @@ textarea {
 
 .cms-detail-body {
   display: grid;
-  grid-template-columns: minmax(220px, 280px) 1fr;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
   gap: 20px;
   align-items: start;
 }
 
 .cms-detail-cover {
   width: 100%;
+  max-width: 280px;
   border-radius: 14px;
   background: #ede5d8;
   object-fit: cover;
@@ -640,6 +641,8 @@ textarea {
   margin: 0;
   color: #2f3d2d;
   font-size: 24px;
+  line-height: 1.4;
+  word-break: break-word;
 }
 
 .cms-detail-tags,
@@ -648,6 +651,7 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
 }
 
 .cms-detail-tag,
@@ -659,26 +663,32 @@ textarea {
   background: #f3ede3;
   color: #5a4b36;
   font-size: 12px;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .cms-detail-meta-item {
-  width: calc(50% - 4px);
+  flex: 1 1 220px;
   min-width: 220px;
   color: #5a5a5a;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.6;
+  word-break: break-word;
 }
 
 .cms-detail-section {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
 }
 
 .cms-detail-section h4 {
   margin: 0;
   color: #355c3b;
   font-size: 15px;
+  line-height: 1.4;
 }
 
 .cms-detail-content,
@@ -691,6 +701,7 @@ textarea {
   font-size: 13px;
   line-height: 1.6;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .cms-detail-content {
@@ -704,6 +715,9 @@ textarea {
   color: #5a5a5a;
   line-height: 1.8;
   text-indent: 2em;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .cms-detail-episode-list {
@@ -719,11 +733,20 @@ textarea {
 }
 
 .cms-detail-episode {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
+  max-width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #ffffff;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .cms-detail-episode input[type="checkbox"] {
   margin: 0;
+  flex: 0 0 auto;
 }
 
 @media (max-width: 720px) {
@@ -754,5 +777,13 @@ textarea {
 
   .task {
     grid-template-columns: 1fr;
+  }
+
+  .cms-detail-body {
+    grid-template-columns: 1fr;
+  }
+
+  .cms-detail-cover {
+    max-width: 100%;
   }
 }

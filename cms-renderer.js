@@ -687,12 +687,13 @@ function renderCmsDetail(detail) {
   if (playSources.childElementCount > 0) {
     episodeSection.appendChild(playSources);
   }
+  episodeSection.style["grid-column"] = "1 / -1";
   episodeSection.appendChild(episodeTitle);
   episodeSection.appendChild(toolbar);
   episodeSection.appendChild(episodeList);
-  main.appendChild(episodeSection);
-
   layout.appendChild(main);
+  layout.appendChild(episodeSection);
+
   cmsDetailBodyEl.appendChild(layout);
 }
 
