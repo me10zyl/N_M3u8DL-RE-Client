@@ -15,7 +15,8 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1000,
     height: 750,
-    webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, icon: path.join(__dirname, 'icon.png') }
+    webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false },
+    icon: path.join(__dirname, 'icon.png')
   });
   mainWindow.loadFile(path.join(__dirname, "index.html"));
 }
