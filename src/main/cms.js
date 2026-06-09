@@ -338,7 +338,7 @@ function normalizeCmsVideo(item, sourceId) {
   };
 }
 
-function parseVodPlaySources(value) {
+function parseVodPlaySources(value, playFromValue = "") {
   const sourceText = String(value || "").trim();
   if (!sourceText) {
     return [];
@@ -371,19 +371,34 @@ function parseVodPlaySources(value) {
     .filter(Boolean);
 
   const sourceTextParts = sourceText.split("$$$");
-  const episodeText = sourceTextParts.length > 1
-    ? sourceTextParts[sourceTextParts.length - 1]
-    : sourceText;
-  const episodes = parseEpisodeList(episodeText);
-
-  if (!episodes.length) {
+  const playFromParts = String(playFromValue || "")
+    .split("$$$")
+    .map((item) => item.trim());
+  const rawSources = sourceTextParts
+    .map((episodeText, index) => ({
+      sourceName: toSafeString(playFromParts[index] || `线路${index + 1}`, 120),
+      episodes: parseEpisodeList(episodeText)
+    }))
+    .filter((source) => source.episodes.length > 0);
+  
+  if (!rawSources.length) {
     return [];
   }
 
+
+  const m3u8Source = rawSources[1] || rawSources[0];
+  const sourcePlaySource = rawSources[0];
+
   return [
     {
-      sourceName: "默认线路",
-      episodes
+      ...m3u8Source,
+      episodes: m3u8Source.episodes.map((episode) => {
+        const sourceEpisode = sourcePlaySource.episodes.find((candidate) => candidate.name === episode.name && candidate.url !== episode.url);
+        return {
+          ...episode,
+          sourceUrl: sourceEpisode ? sourceEpisode.url : episode.url
+        };
+      })
     }
   ];
 }
@@ -400,7 +415,7 @@ function normalizeCmsVideoDetail(item, sourceId) {
     serial: toSafeString(item.vod_serial || item.serial, 40),
     playFrom: toSafeString(item.vod_play_from, 500),
     playUrl: toSafeString(item.vod_play_url, 5000),
-    playSources: parseVodPlaySources(item.vod_play_url)
+    playSources: parseVodPlaySources(item.vod_play_url, item.vod_play_from)
   };
 }
 

@@ -22,6 +22,10 @@ const openCmsDownloadDetailBtn = document.getElementById("openCmsDownloadDetailB
 const cmsDownloadModal = document.getElementById("cmsDownloadModal");
 const closeCmsDownloadModalBtn = document.getElementById("closeCmsDownloadModalBtn");
 const cmsDownloadNameModal = document.getElementById("cmsDownloadNameModal");
+const cmsPlayerModal = document.getElementById("cmsPlayerModal");
+const closeCmsPlayerModalBtn = document.getElementById("closeCmsPlayerModalBtn");
+const cmsPlayerTitleEl = document.getElementById("cmsPlayerTitle");
+const cmsPlayerStatusEl = document.getElementById("cmsPlayerStatus");
 const closeCmsDownloadNameModalBtn = document.getElementById("closeCmsDownloadNameModalBtn");
 const cancelCmsDownloadNameBtn = document.getElementById("cancelCmsDownloadNameBtn");
 const confirmCmsDownloadNameBtn = document.getElementById("confirmCmsDownloadNameBtn");
@@ -86,6 +90,7 @@ let cmsLastDetailDownloadGroupKey = "";
 let cmsDetailDownloadGroupKeys = {};
 let cmsPendingDownloadDetail = null;
 let cmsPendingDownloadEpisodes = [];
+let cmsHlsPlayer = null;
 let isCmsConsoleCollapsed = true;
 let cmsConsoleUnreadCount = 0;
 
@@ -613,7 +618,8 @@ function getEpisodeItems(detail) {
   return detail.playSources.flatMap((source) => source.episodes.map((episode) => ({
     key: `${episode.name}$${episode.url}`,
     name: episode.name,
-    url: episode.url
+    url: episode.url,
+    sourceUrl: episode.sourceUrl
   })));
 }
 
@@ -774,11 +780,101 @@ function ensureCmsEpisodeSelection(detail) {
   cmsDetailState.episodeSelection = nextSelection;
 }
 
-function openEpisodeLink(episode) {
-  if (!episode || !episode.url) {
+function getEpisodeM3u8Url(episode) {
+  return String(episode && episode.url || "").trim();
+}
+
+function getEpisodeSourceUrl(episode) {
+  return String(episode && episode.sourceUrl || episode && episode.url || "").trim();
+}
+
+function destroyCmsHlsPlayer() {
+  if (cmsHlsPlayer) {
+    cmsHlsPlayer.destroy();
+    cmsHlsPlayer = null;
+  }
+}
+
+function closeCmsPlayerModal() {
+  const video = document.getElementById("cmsPlayer");
+  destroyCmsHlsPlayer();
+  if (video) {
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+  }
+  cmsPlayerModal.classList.add("hidden");
+  cmsPlayerStatusEl.textContent = "";
+}
+
+function playCmsM3u8(episode) {
+  const url = getEpisodeM3u8Url(episode);
+  if (!url) {
+    setCmsDetailStatus("暂无 m3u8 播放地址。 ");
     return;
   }
-  window.open(episode.url, "_blank", "noopener,noreferrer");
+
+  const video = document.getElementById("cmsPlayer");
+  if (!video) {
+    setCmsDetailStatus("播放器未初始化。");
+    return;
+  }
+
+  cmsPlayerTitleEl.textContent = `播放 m3u8：${episode.name || "未命名剧集"}`;
+  cmsPlayerStatusEl.textContent = "正在加载 m3u8...";
+  cmsPlayerModal.classList.remove("hidden");
+  destroyCmsHlsPlayer();
+  video.pause();
+  video.removeAttribute("src");
+  video.load();
+
+  const play = () => video.play().catch((error) => {
+    const message = `播放失败：${error instanceof Error ? error.message : String(error)}`;
+    cmsPlayerStatusEl.textContent = message;
+    setCmsDetailStatus(message);
+  });
+
+  if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    video.src = url;
+    play();
+    cmsPlayerStatusEl.textContent = `正在播放：${episode.name || "未命名剧集"}`;
+    setCmsDetailStatus(`正在播放：${episode.name || "未命名剧集"}`);
+    return;
+  }
+
+  if (window.Hls && window.Hls.isSupported()) {
+    cmsHlsPlayer = new window.Hls();
+    cmsHlsPlayer.loadSource(url);
+    cmsHlsPlayer.attachMedia(video);
+    cmsHlsPlayer.on(window.Hls.Events.MANIFEST_PARSED, () => {
+      play();
+      cmsPlayerStatusEl.textContent = `正在播放：${episode.name || "未命名剧集"}`;
+      setCmsDetailStatus(`正在播放：${episode.name || "未命名剧集"}`);
+    });
+    cmsHlsPlayer.on(window.Hls.Events.ERROR, (event, data) => {
+      if (data && data.fatal) {
+        const message = `HLS 播放失败：${data.type || "未知错误"}`;
+        cmsPlayerStatusEl.textContent = message;
+        setCmsDetailStatus(message);
+      }
+    });
+    return;
+  }
+
+  video.src = url;
+  play();
+  cmsPlayerStatusEl.textContent = "当前环境不支持 hls.js，已尝试直接播放 m3u8。";
+  setCmsDetailStatus("当前环境不支持 hls.js，已尝试直接播放 m3u8。");
+}
+
+function openEpisodeSourceLink(episode) {
+  const url = getEpisodeSourceUrl(episode);
+  if (!url) {
+    setCmsDetailStatus("暂无原站播放地址。");
+    return;
+  }
+  console.log('source url', url)
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 function getSelectedCmsEpisodes(detail = cmsDetailState.item) {
@@ -1097,6 +1193,7 @@ function renderCmsDetail(detail) {
 
   const episodeList = document.createElement("div");
   episodeList.className = "cms-detail-episode-list";
+  console.log(episodes)
   episodes.forEach((episode) => {
     const label = document.createElement("label");
     label.className = "cms-detail-episode";
@@ -1119,13 +1216,29 @@ function renderCmsDetail(detail) {
     urlLink.rel = "noreferrer";
     urlLink.textContent = episode.url;
 
-    const playBtn = document.createElement("button");
-    playBtn.className = "btn small primary cms-detail-play-btn";
-    playBtn.textContent = "点击播放";
-    playBtn.addEventListener("click", (event) => {
+    const playActions = document.createElement("div");
+    playActions.className = "cms-detail-episode-actions";
+
+    const playM3u8Btn = document.createElement("button");
+    playM3u8Btn.className = "btn small primary cms-detail-play-btn";
+    playM3u8Btn.type = "button";
+    playM3u8Btn.textContent = "播放 m3u8";
+    playM3u8Btn.addEventListener("click", (event) => {
       event.preventDefault();
-      openEpisodeLink(episode);
+      playCmsM3u8(episode);
     });
+
+    const playSourceBtn = document.createElement("button");
+    playSourceBtn.className = "btn small cms-detail-play-btn";
+    playSourceBtn.type = "button";
+    playSourceBtn.textContent = "原站播放";
+    playSourceBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      openEpisodeSourceLink(episode);
+    });
+
+    playActions.appendChild(playM3u8Btn);
+    playActions.appendChild(playSourceBtn);
 
     const meta = document.createElement("div");
     meta.className = "cms-detail-episode-meta";
@@ -1134,7 +1247,7 @@ function renderCmsDetail(detail) {
 
     label.appendChild(checkbox);
     label.appendChild(meta);
-    label.appendChild(playBtn);
+    label.appendChild(playActions);
     episodeList.appendChild(label);
   });
 
@@ -1605,6 +1718,12 @@ cmsDownloadShowNameInput.addEventListener("keydown", (event) => {
 cmsDownloadNameModal.addEventListener("click", (event) => {
   if (event.target === cmsDownloadNameModal) {
     closeCmsDownloadNameModal();
+  }
+});
+closeCmsPlayerModalBtn.addEventListener("click", () => closeCmsPlayerModal());
+cmsPlayerModal.addEventListener("click", (event) => {
+  if (event.target === cmsPlayerModal) {
+    closeCmsPlayerModal();
   }
 });
 cmsStopAllFromDetailBtn.addEventListener("click", async () => {

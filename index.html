@@ -264,6 +264,17 @@
       </div>
     </div>
 
+    <div id="cmsPlayerModal" class="modal hidden">
+      <div class="modal-panel cms-player-modal-panel">
+        <div class="modal-header">
+          <h2 id="cmsPlayerTitle">播放 m3u8</h2>
+          <button id="closeCmsPlayerModalBtn" class="btn small" type="button">关闭</button>
+        </div>
+        <video id="cmsPlayer" class="cms-player" controls playsinline></video>
+        <div id="cmsPlayerStatus" class="status"></div>
+      </div>
+    </div>
+
     <div id="adDebugModal" class="modal hidden">
       <div class="modal-panel">
         <div class="modal-header">
@@ -316,6 +327,7 @@
       </div>
     </div>
 
+    <script src="hls.min.js"></script>
     <script src="renderer.js"></script>
     <script src="cms-renderer.js"></script>
   </body>

@@ -365,6 +365,10 @@ textarea {
   max-width: 520px;
 }
 
+.cms-player-modal-panel {
+  max-width: 760px;
+}
+
 .modal-header,
 .ad-debug-toolbar {
   display: flex;
@@ -917,6 +921,20 @@ textarea {
 .cms-detail-episode-meta span {
   color: #2f3d2d;
   font-weight: 600;
+}
+
+.cms-player {
+  width: 100%;
+  max-height: 460px;
+  border-radius: 12px;
+  background: #000000;
+}
+
+.cms-detail-episode-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
 }
 
 .cms-detail-episode-url {
