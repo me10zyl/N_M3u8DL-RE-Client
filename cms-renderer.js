@@ -21,6 +21,12 @@ const cmsDownloadPopover = document.getElementById("cmsDownloadPopover");
 const openCmsDownloadDetailBtn = document.getElementById("openCmsDownloadDetailBtn");
 const cmsDownloadModal = document.getElementById("cmsDownloadModal");
 const closeCmsDownloadModalBtn = document.getElementById("closeCmsDownloadModalBtn");
+const cmsDownloadNameModal = document.getElementById("cmsDownloadNameModal");
+const closeCmsDownloadNameModalBtn = document.getElementById("closeCmsDownloadNameModalBtn");
+const cancelCmsDownloadNameBtn = document.getElementById("cancelCmsDownloadNameBtn");
+const confirmCmsDownloadNameBtn = document.getElementById("confirmCmsDownloadNameBtn");
+const cmsDownloadShowNameInput = document.getElementById("cmsDownloadShowNameInput");
+const cmsDownloadNameStatusEl = document.getElementById("cmsDownloadNameStatus");
 const cmsStopAllFromDetailBtn = document.getElementById("cmsStopAllFromDetailBtn");
 const cmsDownloadSummaryEl = document.getElementById("cmsDownloadSummary");
 const cmsDownloadMiniListEl = document.getElementById("cmsDownloadMiniList");
@@ -77,6 +83,9 @@ let cmsDetailState = {
 let cmsDownloadTaskState = {};
 let cmsDownloadActiveGroupKey = "__all__";
 let cmsLastDetailDownloadGroupKey = "";
+let cmsDetailDownloadGroupKeys = {};
+let cmsPendingDownloadDetail = null;
+let cmsPendingDownloadEpisodes = [];
 let isCmsConsoleCollapsed = true;
 let cmsConsoleUnreadCount = 0;
 
@@ -622,6 +631,105 @@ function getCmsDownloadGroupKeyFromTask(task) {
   return task.groupKey || task.showName || getCmsDownloadGroupKeyFromName(task.name);
 }
 
+function getCmsDetailDownloadKey(detail) {
+  const sourceId = String(detail && detail.sourceId || "").trim();
+  const detailId = String(detail && detail.id || "").trim();
+  if (sourceId && detailId) {
+    return `${sourceId}:${detailId}`;
+  }
+  return String(detail && detail.name || "未命名影片").trim() || "未命名影片";
+}
+
+function getCmsDetailDownloadGroupKeys(detail) {
+  const keys = new Set();
+  const defaultName = String(detail && detail.name || "未命名影片").trim() || "未命名影片";
+  keys.add(defaultName);
+  const mappedKey = cmsDetailDownloadGroupKeys[getCmsDetailDownloadKey(detail)];
+  if (mappedKey) {
+    keys.add(mappedKey);
+  }
+  return keys;
+}
+
+function closeCmsDownloadNameModal() {
+  cmsDownloadNameModal.classList.add("hidden");
+  cmsPendingDownloadDetail = null;
+  cmsPendingDownloadEpisodes = [];
+  cmsDownloadShowNameInput.value = "";
+  cmsDownloadNameStatusEl.textContent = "";
+  confirmCmsDownloadNameBtn.disabled = false;
+}
+
+function openCmsDownloadNameModal(detail, episodes) {
+  cmsPendingDownloadDetail = detail;
+  cmsPendingDownloadEpisodes = episodes;
+  cmsDownloadShowNameInput.value = detail.name || "未命名影片";
+  cmsDownloadNameStatusEl.textContent = `将加入 ${episodes.length} 个剧集。`;
+  cmsDownloadNameModal.classList.remove("hidden");
+  cmsDownloadShowNameInput.focus();
+  cmsDownloadShowNameInput.select();
+}
+
+async function confirmCmsDownloadName() {
+  const detail = cmsPendingDownloadDetail;
+  const selectedEpisodes = cmsPendingDownloadEpisodes;
+  if (!detail || !selectedEpisodes.length) {
+    closeCmsDownloadNameModal();
+    setCmsDetailStatus("请至少勾选一个剧集。");
+    return;
+  }
+
+  const showName = cmsDownloadShowNameInput.value.trim();
+  if (!showName) {
+    cmsDownloadNameStatusEl.textContent = "请输入电视剧名称。";
+    cmsDownloadShowNameInput.focus();
+    return;
+  }
+
+  confirmCmsDownloadNameBtn.disabled = true;
+  cmsDownloadNameStatusEl.textContent = "正在加入下载队列...";
+  try {
+    const config = await window.api.getConfig();
+    const response = await window.api.startTasks({
+      exePath: config.exePath,
+      tempRoot: config.tempRoot,
+      finalRoot: config.defaultFinalRoot,
+      showName,
+      pageId: "cms",
+      removeAds: config.removeAds,
+      useSystemProxy: config.useSystemProxy,
+      adSegmentThreshold: config.adSegmentThreshold,
+      adDurationSequence: config.adDurationSequence,
+      items: selectedEpisodes.map((episode) => ({
+        episodeTitle: episode.name,
+        url: episode.url
+      }))
+    });
+    if (!response.ok) {
+      cmsDownloadNameStatusEl.textContent = response.message || "加入下载队列失败";
+      setCmsDetailStatus(response.message || "加入下载队列失败");
+      appendCmsConsole("CMS 加入下载队列失败", response);
+      confirmCmsDownloadNameBtn.disabled = false;
+      return;
+    }
+    cmsLastDetailDownloadGroupKey = showName;
+    cmsDetailDownloadGroupKeys[getCmsDetailDownloadKey(detail)] = showName;
+    cmsDownloadActiveGroupKey = showName;
+    setCmsDetailStatus(`已加入下载队列：${showName}，${selectedEpisodes.length} 个剧集`);
+    cmsDownloadLogEl.textContent += `已加入下载队列：${showName}，共 ${selectedEpisodes.length} 个剧集。\n`;
+    cmsDownloadLogEl.scrollTop = cmsDownloadLogEl.scrollHeight;
+    closeCmsDownloadNameModal();
+    updateCmsDownloadSummary();
+    renderCmsDetail(detail);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    cmsDownloadNameStatusEl.textContent = `加入下载队列异常：${message}`;
+    setCmsDetailStatus(`加入下载队列异常：${message}`);
+    appendCmsConsole("CMS 加入下载队列异常", message);
+    confirmCmsDownloadNameBtn.disabled = false;
+  }
+}
+
 function getCmsDownloadCounts(entries) {
   return entries.reduce((summary, [, task]) => {
     const status = task.status || "queued";
@@ -818,14 +926,15 @@ function updateCmsDownloadSummary() {
   }
 }
 
-function renderCmsDetailDownloadInfo(groupKey) {
+function renderCmsDetailDownloadInfo(detail) {
   const wrap = document.createElement("div");
   wrap.className = "cms-detail-download-info";
   const title = document.createElement("h4");
   title.textContent = "下载信息";
   wrap.appendChild(title);
 
-  const entries = Object.entries(cmsDownloadTaskState).filter(([, task]) => getCmsDownloadGroupKeyFromTask(task) === groupKey);
+  const groupKeys = getCmsDetailDownloadGroupKeys(detail);
+  const entries = Object.entries(cmsDownloadTaskState).filter(([, task]) => groupKeys.has(getCmsDownloadGroupKeyFromTask(task)));
   if (!entries.length) {
     const empty = document.createElement("div");
     empty.className = "cms-placeholder";
@@ -973,41 +1082,13 @@ function renderCmsDetail(detail) {
   const queueBtn = document.createElement("button");
   queueBtn.className = "btn small primary";
   queueBtn.textContent = "加入下载队列";
-  queueBtn.addEventListener("click", async () => {
+  queueBtn.addEventListener("click", () => {
     const selectedEpisodes = getSelectedCmsEpisodes(detail);
     if (!selectedEpisodes.length) {
       setCmsDetailStatus("请至少勾选一个剧集。");
       return;
     }
-
-    const config = await window.api.getConfig();
-    const response = await window.api.startTasks({
-      exePath: config.exePath,
-      tempRoot: config.tempRoot,
-      finalRoot: config.defaultFinalRoot,
-      showName: detail.name || "未命名影片",
-      pageId: "cms",
-      removeAds: config.removeAds,
-      useSystemProxy: config.useSystemProxy,
-      adSegmentThreshold: config.adSegmentThreshold,
-      adDurationSequence: config.adDurationSequence,
-      items: selectedEpisodes.map((episode) => ({
-        episodeTitle: episode.name,
-        url: episode.url
-      }))
-    });
-    if (!response.ok) {
-      setCmsDetailStatus(response.message || "加入下载队列失败");
-      appendCmsConsole("CMS 加入下载队列失败", response);
-      return;
-    }
-    cmsLastDetailDownloadGroupKey = detail.name || "未命名影片";
-    cmsDownloadActiveGroupKey = cmsLastDetailDownloadGroupKey;
-    setCmsDetailStatus(`已加入下载队列：${selectedEpisodes.length} 个剧集`);
-    cmsDownloadLogEl.textContent += `已加入下载队列：${detail.name || "未命名影片"}，共 ${selectedEpisodes.length} 个剧集。\n`;
-    cmsDownloadLogEl.scrollTop = cmsDownloadLogEl.scrollHeight;
-    updateCmsDownloadSummary();
-    renderCmsDetail(detail);
+    openCmsDownloadNameModal(detail, selectedEpisodes);
   });
   toolbar.appendChild(selectAllBtn);
   toolbar.appendChild(unselectAllBtn);
@@ -1062,7 +1143,7 @@ function renderCmsDetail(detail) {
   episodeSection.appendChild(episodeList);
   layout.appendChild(main);
   layout.appendChild(episodeSection);
-  layout.appendChild(renderCmsDetailDownloadInfo(detail.name || "未命名影片"));
+  layout.appendChild(renderCmsDetailDownloadInfo(detail));
 
   cmsDetailBodyEl.appendChild(layout);
 }
@@ -1508,6 +1589,23 @@ openCmsDownloadDetailBtn?.addEventListener("click", () => {
 });
 closeCmsDownloadModalBtn.addEventListener("click", () => {
   cmsDownloadModal.classList.add("hidden");
+});
+closeCmsDownloadNameModalBtn.addEventListener("click", () => closeCmsDownloadNameModal());
+cancelCmsDownloadNameBtn.addEventListener("click", () => closeCmsDownloadNameModal());
+confirmCmsDownloadNameBtn.addEventListener("click", () => confirmCmsDownloadName());
+cmsDownloadShowNameInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    confirmCmsDownloadName();
+  }
+  if (event.key === "Escape") {
+    closeCmsDownloadNameModal();
+  }
+});
+cmsDownloadNameModal.addEventListener("click", (event) => {
+  if (event.target === cmsDownloadNameModal) {
+    closeCmsDownloadNameModal();
+  }
 });
 cmsStopAllFromDetailBtn.addEventListener("click", async () => {
   await window.api.stopAll();
