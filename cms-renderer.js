@@ -5,6 +5,10 @@ const cmsDetailBodyEl = document.getElementById("cmsDetailBody");
 const cmsDetailStatusEl = document.getElementById("cmsDetailStatus");
 const cmsBackToListBtn = document.getElementById("cmsBackToListBtn");
 const cmsSourceSelectEl = document.getElementById("cmsSourceSelect");
+const cmsSourcePickerEl = document.getElementById("cmsSourcePicker");
+const cmsSourcePickerBtn = document.getElementById("cmsSourcePickerBtn");
+const cmsSourcePickerNameEl = document.getElementById("cmsSourcePickerName");
+const cmsSourcePickerMenuEl = document.getElementById("cmsSourcePickerMenu");
 const cmsCategoryRowEl = document.getElementById("cmsCategoryRow");
 const cmsVideoGridEl = document.getElementById("cmsVideoGrid");
 const cmsSearchInputEl = document.getElementById("cmsSearchInput");
@@ -68,6 +72,8 @@ let cmsDetailState = {
   playerError: ""
 };
 let cmsDownloadTaskState = {};
+let cmsDownloadActiveGroupKey = "__all__";
+let cmsLastDetailDownloadGroupKey = "";
 let isCmsConsoleCollapsed = true;
 let cmsConsoleUnreadCount = 0;
 
@@ -236,23 +242,85 @@ function editCmsSource(source) {
   setCmsSettingsStatus(`正在编辑：${source.name}`);
 }
 
+function closeCmsSourcePicker() {
+  cmsSourcePickerMenuEl.classList.add("hidden");
+  cmsSourcePickerBtn.setAttribute("aria-expanded", "false");
+}
+
+function openCmsSourcePicker() {
+  if (!cmsState.sources.length) {
+    return;
+  }
+  cmsSourcePickerMenuEl.classList.remove("hidden");
+  cmsSourcePickerBtn.setAttribute("aria-expanded", "true");
+}
+
+function toggleCmsSourcePicker() {
+  if (cmsSourcePickerMenuEl.classList.contains("hidden")) {
+    openCmsSourcePicker();
+    return;
+  }
+  closeCmsSourcePicker();
+}
+
+function selectCmsSource(sourceId) {
+  if (cmsSourceSelectEl.value === sourceId) {
+    closeCmsSourcePicker();
+    return;
+  }
+  cmsSourceSelectEl.value = sourceId;
+  closeCmsSourcePicker();
+  cmsSourceSelectEl.dispatchEvent(new Event("change"));
+}
+
 function renderCmsSourceSelect() {
   cmsSourceSelectEl.innerHTML = "";
+  cmsSourcePickerMenuEl.innerHTML = "";
   if (cmsState.sources.length === 0) {
     const option = document.createElement("option");
     option.value = "";
     option.textContent = "未配置资源站";
     cmsSourceSelectEl.appendChild(option);
+    cmsSourcePickerNameEl.textContent = "未配置资源站";
+    cmsSourcePickerBtn.disabled = true;
+    closeCmsSourcePicker();
     return;
   }
 
+  cmsSourcePickerBtn.disabled = false;
   for (const source of cmsState.sources) {
+    const label = source.enabled === false ? `${source.name}（已禁用）` : source.name;
     const option = document.createElement("option");
     option.value = source.id;
-    option.textContent = source.enabled === false ? `${source.name}（已禁用）` : source.name;
+    option.textContent = label;
     option.selected = source.id === cmsState.activeSourceId;
     cmsSourceSelectEl.appendChild(option);
+
+    const item = document.createElement("button");
+    item.className = `cms-source-picker-option${source.id === cmsState.activeSourceId ? " active" : ""}${source.enabled === false ? " disabled" : ""}`;
+    item.type = "button";
+    item.setAttribute("role", "option");
+    item.setAttribute("aria-selected", String(source.id === cmsState.activeSourceId));
+    item.dataset.sourceId = source.id;
+
+    const name = document.createElement("span");
+    name.className = "cms-source-picker-option-name";
+    name.textContent = source.name || "未命名资源站";
+    const status = document.createElement("span");
+    status.className = "cms-source-picker-option-status";
+    status.textContent = source.enabled === false ? "已禁用" : "可用";
+
+    item.appendChild(name);
+    item.appendChild(status);
+    item.addEventListener("click", () => selectCmsSource(source.id));
+    cmsSourcePickerMenuEl.appendChild(item);
   }
+
+  const activeSource = getSelectedCmsSource();
+  cmsSourcePickerNameEl.textContent = activeSource
+    ? (activeSource.enabled === false ? `${activeSource.name}（已禁用）` : activeSource.name)
+    : "请选择资源站";
+  closeCmsSourcePicker();
 }
 
 function renderCmsSourceList() {
@@ -326,7 +394,9 @@ function renderCmsPlaceholder(message) {
     : "请先在 CMS 设置中新增资源站。");
   cmsVideoGridEl.appendChild(placeholder);
   cmsDownloadSummaryEl.textContent = "暂无 CMS 下载任务。";
-  cmsDownloadMiniListEl.textContent = "暂无任务";
+  if (cmsDownloadMiniListEl) {
+    cmsDownloadMiniListEl.textContent = "暂无任务";
+  }
   cmsDownloadTaskListEl.textContent = "暂无任务";
 }
 
@@ -431,6 +501,29 @@ function getCmsSourceDisplayName() {
   return getSelectedCmsSource()?.name || "";
 }
 
+function getCmsDownloadGroupKeyFromName(name) {
+  const text = String(name || "未命名影片").trim() || "未命名影片";
+  const index = text.lastIndexOf("_");
+  return index > 0 ? text.slice(0, index) : text;
+}
+
+function getCmsDownloadGroupKeyFromTask(task) {
+  return task.groupKey || task.showName || getCmsDownloadGroupKeyFromName(task.name);
+}
+
+function getCmsDownloadCounts(entries) {
+  return entries.reduce((summary, [, task]) => {
+    const status = task.status || "queued";
+    summary.total += 1;
+    summary[status] = (summary[status] || 0) + 1;
+    return summary;
+  }, { total: 0 });
+}
+
+function formatCmsDownloadCounts(counts) {
+  return `共 ${counts.total || 0} 个任务，队列中 ${counts.queued || 0}，进行中 ${counts.running || 0}，完成 ${counts.done || 0}，失败 ${counts.error || 0}，取消 ${counts.cancelled || 0}`;
+}
+
 function buildEpisodeCopyText(episodes) {
   return episodes
     .map((episode) => `${episode.name}$${episode.url}`)
@@ -480,58 +573,165 @@ function toggleAllCmsEpisodes(checked) {
   renderCmsDetail(cmsDetailState.item);
 }
 
+function createCmsDownloadTaskRow(id, task, { compact = false } = {}) {
+  const row = document.createElement("div");
+  row.className = `task ${task.status || "queued"}`;
+
+  const name = document.createElement("div");
+  name.className = "task-name";
+  name.textContent = task.name || id;
+
+  const status = document.createElement("div");
+  status.className = "task-status";
+  status.textContent = String(task.status || "queued").toUpperCase();
+
+  const message = document.createElement("div");
+  message.className = "task-message";
+  message.textContent = task.message || "";
+
+  const actions = document.createElement("div");
+  actions.className = "task-actions";
+  if (["queued", "running"].includes(task.status || "queued")) {
+    const stopBtn = document.createElement("button");
+    stopBtn.className = "btn small danger";
+    stopBtn.type = "button";
+    stopBtn.textContent = task.status === "running" ? "停止当前" : "移出队列";
+    stopBtn.addEventListener("click", async () => {
+      await window.api.removeTask(id);
+      cmsDownloadLogEl.textContent += `已请求停止：${task.name || id}\n`;
+      cmsDownloadLogEl.scrollTop = cmsDownloadLogEl.scrollHeight;
+    });
+    actions.appendChild(stopBtn);
+  }
+
+  if (compact) {
+    row.textContent = `${task.name || id} [${String(task.status || "queued").toUpperCase()}] ${task.message || ""}`.trim();
+    return row;
+  }
+
+  row.appendChild(name);
+  row.appendChild(status);
+  row.appendChild(message);
+  row.appendChild(actions);
+  return row;
+}
+
+function getCmsDownloadGroups() {
+  const groups = new Map();
+  for (const [id, task] of Object.entries(cmsDownloadTaskState)) {
+    const key = getCmsDownloadGroupKeyFromTask(task);
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key).push([id, task]);
+  }
+  return groups;
+}
+
+function renderCmsDownloadTabs(groups, selectedEntries) {
+  const tabs = document.createElement("div");
+  tabs.className = "cms-download-tabs";
+
+  const allEntries = Object.entries(cmsDownloadTaskState);
+  const allBtn = document.createElement("button");
+  allBtn.className = `btn small${cmsDownloadActiveGroupKey === "__all__" ? " active" : ""}`;
+  allBtn.type = "button";
+  allBtn.textContent = `全部（${allEntries.length}）`;
+  allBtn.addEventListener("click", () => {
+    cmsDownloadActiveGroupKey = "__all__";
+    updateCmsDownloadSummary();
+  });
+  tabs.appendChild(allBtn);
+
+  for (const [groupKey, entries] of groups) {
+    const btn = document.createElement("button");
+    btn.className = `btn small${cmsDownloadActiveGroupKey === groupKey ? " active" : ""}`;
+    btn.type = "button";
+    btn.textContent = `${groupKey}（${entries.length}）`;
+    btn.addEventListener("click", () => {
+      cmsDownloadActiveGroupKey = groupKey;
+      updateCmsDownloadSummary();
+    });
+    tabs.appendChild(btn);
+  }
+
+  const stopCurrentBtn = document.createElement("button");
+  stopCurrentBtn.className = "btn small danger";
+  stopCurrentBtn.type = "button";
+  stopCurrentBtn.textContent = "停止当前分类任务";
+  stopCurrentBtn.disabled = selectedEntries.length === 0;
+  stopCurrentBtn.addEventListener("click", async () => {
+    const cancellable = selectedEntries.filter(([, task]) => ["queued", "running"].includes(task.status || "queued"));
+    for (const [id] of cancellable) {
+      await window.api.removeTask(id);
+    }
+    cmsDownloadLogEl.textContent += `已请求停止当前分类任务：${cmsDownloadActiveGroupKey === "__all__" ? "全部" : cmsDownloadActiveGroupKey}，${cancellable.length} 个。\n`;
+    cmsDownloadLogEl.scrollTop = cmsDownloadLogEl.scrollHeight;
+  });
+  tabs.appendChild(stopCurrentBtn);
+  return tabs;
+}
+
 function updateCmsDownloadSummary() {
   const entries = Object.entries(cmsDownloadTaskState);
   if (!entries.length) {
-    cmsDownloadSummaryEl.textContent = "暂无 CMS 下载任务。";
-    cmsDownloadMiniListEl.textContent = "暂无任务";
+    cmsDownloadSummaryEl.textContent = "总计：暂无 CMS 下载任务。";
+    if (cmsDownloadMiniListEl) {
+      cmsDownloadMiniListEl.textContent = "暂无任务";
+    }
     cmsDownloadTaskListEl.textContent = "暂无任务";
     return;
   }
 
-  const counts = entries.reduce((summary, [, task]) => {
-    const status = task.status || "queued";
-    summary.total += 1;
-    summary[status] = (summary[status] || 0) + 1;
-    return summary;
-  }, { total: 0 });
-  cmsDownloadSummaryEl.textContent = `共 ${counts.total} 个任务，队列中 ${counts.queued || 0}，进行中 ${counts.running || 0}，完成 ${counts.done || 0}，失败 ${counts.error || 0}，取消 ${counts.cancelled || 0}`;
-
-  const items = entries.slice().reverse();
-  cmsDownloadMiniListEl.innerHTML = "";
-  cmsDownloadTaskListEl.innerHTML = "";
-  for (const [id, task] of items) {
-    const line = `${task.name || id} [${String(task.status || "queued").toUpperCase()}] ${task.message || ""}`.trim();
-
-    const mini = document.createElement("div");
-    mini.className = `task ${task.status || "queued"}`;
-    mini.textContent = line;
-    cmsDownloadMiniListEl.appendChild(mini);
-
-    const row = document.createElement("div");
-    row.className = `task ${task.status || "queued"}`;
-
-    const name = document.createElement("div");
-    name.className = "task-name";
-    name.textContent = task.name || id;
-
-    const status = document.createElement("div");
-    status.className = "task-status";
-    status.textContent = String(task.status || "queued").toUpperCase();
-
-    const message = document.createElement("div");
-    message.className = "task-message";
-    message.textContent = task.message || "";
-
-    const actions = document.createElement("div");
-    actions.className = "task-actions";
-
-    row.appendChild(name);
-    row.appendChild(status);
-    row.appendChild(message);
-    row.appendChild(actions);
-    cmsDownloadTaskListEl.appendChild(row);
+  const groups = getCmsDownloadGroups();
+  if (cmsDownloadActiveGroupKey !== "__all__" && !groups.has(cmsDownloadActiveGroupKey)) {
+    cmsDownloadActiveGroupKey = "__all__";
   }
+  const selectedEntriesRaw = cmsDownloadActiveGroupKey === "__all__" ? entries : groups.get(cmsDownloadActiveGroupKey) || [];
+  const selectedEntries = selectedEntriesRaw.slice().reverse();
+  const totalCounts = getCmsDownloadCounts(entries);
+  const selectedCounts = getCmsDownloadCounts(selectedEntriesRaw);
+  const selectedLabel = cmsDownloadActiveGroupKey === "__all__" ? "全部" : cmsDownloadActiveGroupKey;
+  cmsDownloadSummaryEl.innerHTML = `总计：${formatCmsDownloadCounts(totalCounts)}；<br/>当前分类「${selectedLabel}」：${formatCmsDownloadCounts(selectedCounts)}`;
+
+  if (cmsDownloadMiniListEl) {
+    cmsDownloadMiniListEl.innerHTML = "";
+  }
+  cmsDownloadTaskListEl.innerHTML = "";
+  cmsDownloadTaskListEl.appendChild(renderCmsDownloadTabs(groups, selectedEntries));
+  for (const [id, task] of selectedEntries) {
+    if (cmsDownloadMiniListEl) {
+      cmsDownloadMiniListEl.appendChild(createCmsDownloadTaskRow(id, task, { compact: true }));
+    }
+    cmsDownloadTaskListEl.appendChild(createCmsDownloadTaskRow(id, task));
+  }
+}
+
+function renderCmsDetailDownloadInfo(groupKey) {
+  const wrap = document.createElement("div");
+  wrap.className = "cms-detail-download-info";
+  const title = document.createElement("h4");
+  title.textContent = "下载信息";
+  wrap.appendChild(title);
+
+  const entries = Object.entries(cmsDownloadTaskState).filter(([, task]) => getCmsDownloadGroupKeyFromTask(task) === groupKey);
+  if (!entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "cms-placeholder";
+    empty.textContent = "当前详情暂无下载任务。";
+    wrap.appendChild(empty);
+    return wrap;
+  }
+
+  const summary = document.createElement("p");
+  summary.className = "status";
+  summary.textContent = formatCmsDownloadCounts(getCmsDownloadCounts(entries));
+  wrap.appendChild(summary);
+  const list = document.createElement("div");
+  list.className = "task-list";
+  entries.slice().reverse().forEach(([id, task]) => list.appendChild(createCmsDownloadTaskRow(id, task)));
+  wrap.appendChild(list);
+  return wrap;
 }
 
 function renderCmsDetail(detail) {
@@ -554,12 +754,6 @@ function renderCmsDetail(detail) {
     cover.alt = detail.name || "影片封面";
     aside.appendChild(cover);
   }
-  const copyM3u8Btn = document.createElement("button");
-  copyM3u8Btn.className = "btn small primary cms-detail-copy-btn";
-  copyM3u8Btn.type = "button";
-  copyM3u8Btn.textContent = "复制 m3u8 链接";
-  copyM3u8Btn.addEventListener("click", () => copyEpisodesToClipboard(detail));
-  aside.appendChild(copyM3u8Btn);
   layout.appendChild(aside);
 
   const main = document.createElement("div");
@@ -660,6 +854,11 @@ function renderCmsDetail(detail) {
   unselectAllBtn.className = "btn small";
   unselectAllBtn.textContent = "全不选";
   unselectAllBtn.addEventListener("click", () => toggleAllCmsEpisodes(false));
+  const copyM3u8Btn = document.createElement("button");
+  copyM3u8Btn.className = "btn small primary cms-detail-copy-btn";
+  copyM3u8Btn.type = "button";
+  copyM3u8Btn.textContent = "复制 m3u8 链接";
+  copyM3u8Btn.addEventListener("click", () => copyEpisodesToClipboard(detail));
   const queueBtn = document.createElement("button");
   queueBtn.className = "btn small primary";
   queueBtn.textContent = "加入下载队列";
@@ -691,13 +890,17 @@ function renderCmsDetail(detail) {
       appendCmsConsole("CMS 加入下载队列失败", response);
       return;
     }
+    cmsLastDetailDownloadGroupKey = detail.name || "未命名影片";
+    cmsDownloadActiveGroupKey = cmsLastDetailDownloadGroupKey;
     setCmsDetailStatus(`已加入下载队列：${selectedEpisodes.length} 个剧集`);
     cmsDownloadLogEl.textContent += `已加入下载队列：${detail.name || "未命名影片"}，共 ${selectedEpisodes.length} 个剧集。\n`;
     cmsDownloadLogEl.scrollTop = cmsDownloadLogEl.scrollHeight;
-    setCmsPanel("downloads");
+    updateCmsDownloadSummary();
+    renderCmsDetail(detail);
   });
   toolbar.appendChild(selectAllBtn);
   toolbar.appendChild(unselectAllBtn);
+  toolbar.appendChild(copyM3u8Btn);
   toolbar.appendChild(queueBtn);
 
   const episodeList = document.createElement("div");
@@ -748,6 +951,7 @@ function renderCmsDetail(detail) {
   episodeSection.appendChild(episodeList);
   layout.appendChild(main);
   layout.appendChild(episodeSection);
+  layout.appendChild(renderCmsDetailDownloadInfo(detail.name || "未命名影片"));
 
   cmsDetailBodyEl.appendChild(layout);
 }
@@ -1057,8 +1261,11 @@ function setCmsPanel(panelName) {
   for (const [name, panelId] of Object.entries(panelIds)) {
     document.getElementById(panelId).classList.toggle("hidden", name !== panelName);
   }
-  if (panelName !== "list") {
+  if (panelName === "list") {
     setCmsView("list");
+  } else {
+    cmsListPanelEl.classList.add("hidden");
+    cmsDetailPanelEl.classList.add("hidden");
   }
   document.querySelectorAll("[data-cms-panel]").forEach((button) => {
     button.classList.toggle("active", button.dataset.cmsPanel === panelName);
@@ -1067,6 +1274,40 @@ function setCmsPanel(panelName) {
 
 document.querySelectorAll("[data-cms-panel]").forEach((button) => {
   button.addEventListener("click", () => setCmsPanel(button.dataset.cmsPanel));
+});
+
+cmsSourcePickerBtn.addEventListener("click", () => {
+  toggleCmsSourcePicker();
+});
+
+cmsSourcePickerBtn.addEventListener("keydown", (event) => {
+  if (["ArrowDown", "Enter", " "].includes(event.key)) {
+    event.preventDefault();
+    openCmsSourcePicker();
+    cmsSourcePickerMenuEl.querySelector(".cms-source-picker-option")?.focus();
+  }
+});
+
+cmsSourcePickerMenuEl.addEventListener("keydown", (event) => {
+  const options = Array.from(cmsSourcePickerMenuEl.querySelectorAll(".cms-source-picker-option"));
+  const currentIndex = options.indexOf(document.activeElement);
+  if (event.key === "Escape") {
+    closeCmsSourcePicker();
+    cmsSourcePickerBtn.focus();
+    return;
+  }
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    const direction = event.key === "ArrowDown" ? 1 : -1;
+    const nextIndex = Math.max(0, Math.min(options.length - 1, currentIndex + direction));
+    options[nextIndex]?.focus();
+  }
+});
+
+document.addEventListener("click", (event) => {
+  if (!cmsSourcePickerEl.contains(event.target)) {
+    closeCmsSourcePicker();
+  }
 });
 
 saveCmsSourceBtn.addEventListener("click", async () => {
@@ -1133,11 +1374,14 @@ cmsSearchInputEl.addEventListener("keydown", (event) => {
 });
 
 cmsDownloadQueueBtn.addEventListener("click", () => {
-  cmsDownloadPopover.classList.toggle("hidden");
+  cmsDownloadPopover?.classList.add("hidden");
+  cmsDownloadModal.classList.add("hidden");
+  setCmsPanel("downloads");
 });
-openCmsDownloadDetailBtn.addEventListener("click", () => {
-  cmsDownloadPopover.classList.add("hidden");
-  cmsDownloadModal.classList.remove("hidden");
+openCmsDownloadDetailBtn?.addEventListener("click", () => {
+  cmsDownloadPopover?.classList.add("hidden");
+  cmsDownloadModal.classList.add("hidden");
+  setCmsPanel("downloads");
 });
 closeCmsDownloadModalBtn.addEventListener("click", () => {
   cmsDownloadModal.classList.add("hidden");
@@ -1159,13 +1403,18 @@ window.api.onTaskUpdate((event, payload) => {
   }
 
   const existing = cmsDownloadTaskState[payload.id] || {};
+  const name = payload.name || existing.name || payload.id;
   cmsDownloadTaskState[payload.id] = {
     ...existing,
     ...payload,
-    name: payload.name || existing.name || payload.id,
+    name,
+    groupKey: existing.groupKey || getCmsDownloadGroupKeyFromName(name),
     message: payload.message !== undefined ? payload.message : existing.message || ""
   };
   updateCmsDownloadSummary();
+  if (cmsDetailState.item) {
+    renderCmsDetail(cmsDetailState.item);
+  }
 });
 
 setCmsConsoleCollapsed(true);

@@ -16,5 +16,18 @@
   "dependencies": {
     "iconv-lite": "^0.6.3",
     "safer-buffer": "^2.1.2"
+  },
+  "build": {
+    "asar": true,
+    "extraResources": [
+      {
+        "from": "bin/ffmpeg.exe",
+        "to": "ffmpeg.exe"
+      },
+      {
+        "from": "bin/N_m3u8DL-RE.exe",
+        "to": "bin/N_m3u8DL-RE.exe"
+      }
+    ]
   }
 }

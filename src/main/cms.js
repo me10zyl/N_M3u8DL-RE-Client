@@ -53,9 +53,14 @@ function normalizeSource(input = {}, existing = {}) {
 
 function getCmsConfig(config) {
   const cms = config.cms && typeof config.cms === "object" ? config.cms : {};
+  const sources = Array.isArray(cms.sources) ? cms.sources : Array.isArray(config.cmsSources) ? config.cmsSources : [];
+  const configuredActiveSourceId = cms.activeSourceId || config.activeCmsSourceId || "";
+  const activeSourceId = sources.some((source) => source.id === configuredActiveSourceId)
+    ? configuredActiveSourceId
+    : (sources.find((source) => source.enabled !== false) || sources[0] || {}).id || "";
   return {
-    activeSourceId: cms.activeSourceId || config.activeCmsSourceId || "",
-    sources: Array.isArray(cms.sources) ? cms.sources : Array.isArray(config.cmsSources) ? config.cmsSources : [],
+    activeSourceId,
+    sources,
     history: Array.isArray(cms.history) ? cms.history : []
   };
 }
@@ -517,6 +522,16 @@ function registerCmsIpc(ipcMain, store) {
     const normalized = normalizeSource(payload, existing);
     if (!normalized) {
       return { ok: false, message: "请填写有效的资源站名称和 http/https 接口地址。" };
+    }
+
+    const duplicate = cms.sources.find((source) => source.id !== existing.id && normalizeApiUrl(source.apiUrl) === normalized.apiUrl);
+    if (duplicate) {
+      const merged = normalizeSource({ ...duplicate, ...normalized, id: duplicate.id }, duplicate);
+      const sources = cms.sources.map((source) => source.id === duplicate.id ? merged : source);
+      const activeSourceId = cms.activeSourceId || merged.id;
+      const nextCms = { ...cms, activeSourceId, sources };
+      writeCmsConfig(store, nextCms);
+      return { ok: true, source: merged, cms: nextCms, deduped: true };
     }
 
     const sources = existing.id

@@ -85,10 +85,17 @@
         <section id="cmsView" class="hidden">
           <section class="card cms-toolbar">
             <div class="cms-toolbar-main">
-              <label class="field inline-field">
+              <div class="field inline-field cms-source-picker-field">
                 <span>资源站</span>
-                <select id="cmsSourceSelect"></select>
-              </label>
+                <select id="cmsSourceSelect" class="hidden" aria-hidden="true" tabindex="-1"></select>
+                <div class="cms-source-picker" id="cmsSourcePicker">
+                  <button id="cmsSourcePickerBtn" class="cms-source-picker-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
+                    <span id="cmsSourcePickerName">未配置资源站</span>
+                    <span class="cms-source-picker-arrow">⌄</span>
+                  </button>
+                  <div id="cmsSourcePickerMenu" class="cms-source-picker-menu hidden" role="listbox"></div>
+                </div>
+              </div>
               <label class="field inline-field">
                 <span>影片搜索</span>
                 <input id="cmsSearchInput" placeholder="搜索影片名称" />
@@ -102,17 +109,6 @@
               <button id="cmsDownloadQueueBtn" class="btn tab" data-cms-panel="downloads">下载中心</button>
             </div>
             <span id="cmsStatus" class="status"></span>
-          </section>
-
-          <section class="card cms-console-card collapsed" id="cmsConsoleCard">
-            <button id="toggleCmsConsoleBtn" class="cms-console-header btn" type="button" aria-expanded="false">
-              <span>CMS 控制台</span>
-              <span id="cmsConsoleBadge" class="cms-console-badge">点击展开查看请求响应</span>
-            </button>
-            <div class="cms-console-actions">
-              <button id="clearCmsConsole" class="btn small" type="button">清空</button>
-            </div>
-            <pre id="cmsConsole" class="log cms-console-log hidden"></pre>
           </section>
 
           <section id="cmsListPanel" class="card cms-panel">
@@ -175,11 +171,17 @@
             </div>
           </section>
 
-          <div id="cmsDownloadPopover" class="cms-download-popover hidden">
-            <h2>待下载列表</h2>
-            <div id="cmsDownloadMiniList" class="task-list"></div>
-            <button id="openCmsDownloadDetailBtn" class="btn small">进入下载中心</button>
-          </div>
+
+          <section class="card cms-console-card collapsed" id="cmsConsoleCard">
+            <button id="toggleCmsConsoleBtn" class="cms-console-header btn" type="button" aria-expanded="false">
+              <span>CMS 控制台</span>
+              <span id="cmsConsoleBadge" class="cms-console-badge">点击展开查看请求响应</span>
+            </button>
+            <div class="cms-console-actions">
+              <button id="clearCmsConsole" class="btn small" type="button">清空</button>
+            </div>
+            <pre id="cmsConsole" class="log cms-console-log hidden"></pre>
+          </section>
         </section>
 
         <section id="settingsView" class="hidden">
