@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld("api", {
   cmsTestSource: (payload) => ipcRenderer.invoke("cms:sources:test", payload),
   cmsSearch: (payload) => ipcRenderer.invoke("cms:search", payload),
   cmsDetail: (payload) => ipcRenderer.invoke("cms:detail", payload),
+  cmsListHistory: () => ipcRenderer.invoke("cms:history:list"),
+  cmsRecordHistory: (payload) => ipcRenderer.invoke("cms:history:record", payload),
   onAdDebugLog: (handler) => ipcRenderer.on("ad-debug:log", handler),
   onTaskUpdate: (handler) => ipcRenderer.on("task:update", handler)
 });

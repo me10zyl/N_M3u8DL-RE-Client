@@ -34,6 +34,7 @@ const newCmsSourceBtn = document.getElementById("newCmsSource");
 const testCmsSourceBtn = document.getElementById("testCmsSource");
 const cmsSettingsStatusEl = document.getElementById("cmsSettingsStatus");
 const cmsSourceListEl = document.getElementById("cmsSourceList");
+const cmsHistoryListEl = document.getElementById("cmsHistoryList");
 const cmsConsoleCardEl = document.getElementById("cmsConsoleCard");
 const cmsConsoleEl = document.getElementById("cmsConsole");
 const clearCmsConsoleBtn = document.getElementById("clearCmsConsole");
@@ -43,7 +44,8 @@ const cmsConsoleBadgeEl = document.getElementById("cmsConsoleBadge");
 let cmsState = {
   activeSourceId: "",
   sources: [],
-  editingSourceId: ""
+  editingSourceId: "",
+  history: []
 };
 let cmsSearchRequestId = 0;
 let cmsCategoriesRequestId = 0;
@@ -69,7 +71,8 @@ let cmsDetailState = {
   currentPlayingKey: "",
   currentPlayingLabel: "",
   currentPlayingUrl: "",
-  playerError: ""
+  playerError: "",
+  source: null
 };
 let cmsDownloadTaskState = {};
 let cmsDownloadActiveGroupKey = "__all__";
@@ -486,6 +489,114 @@ function renderCmsVideos(items) {
   renderCmsPagination();
 }
 
+function formatCmsHistoryTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "未知时间";
+  }
+  return date.toLocaleString();
+}
+
+function renderCmsHistoryPlaceholder(message) {
+  cmsHistoryListEl.innerHTML = "";
+  const placeholder = document.createElement("div");
+  placeholder.className = "cms-placeholder";
+  placeholder.textContent = message || "暂无历史记录。点击影片进入详情后会出现在这里。";
+  cmsHistoryListEl.appendChild(placeholder);
+}
+
+function openCmsHistoryDetail(item) {
+  setCmsPanel("list");
+  loadCmsDetail(item);
+}
+
+function renderCmsHistory() {
+  cmsHistoryListEl.innerHTML = "";
+  if (!cmsState.history.length) {
+    renderCmsHistoryPlaceholder();
+    return;
+  }
+
+  for (const item of cmsState.history) {
+    const card = document.createElement("article");
+    card.className = "cms-video-card";
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
+    card.setAttribute("aria-label", `查看历史影片 ${item.name || "未命名影片"} 详情`);
+
+    if (item.pic) {
+      const poster = document.createElement("img");
+      poster.className = "cms-video-poster";
+      poster.src = item.pic;
+      poster.alt = item.name || "未命名影片";
+      poster.loading = "lazy";
+      card.appendChild(poster);
+    }
+
+    const title = document.createElement("h3");
+    title.textContent = item.name || "未命名影片";
+    const remarks = document.createElement("div");
+    remarks.className = "cms-video-remarks";
+    remarks.textContent = item.remarks || "点击查看详情";
+    const summary = document.createElement("div");
+    summary.className = "cms-video-summary";
+    summary.textContent = [item.type, item.year, item.area].filter(Boolean).join(" / ") || "暂无分类信息";
+    const sourceMeta = createCmsVideoMeta("来源", item.sourceName || item.sourceId);
+    const timeMeta = createCmsVideoMeta("点击时间", formatCmsHistoryTime(item.viewedAt));
+
+    card.appendChild(title);
+    card.appendChild(remarks);
+    card.appendChild(summary);
+    if (sourceMeta) {
+      card.appendChild(sourceMeta);
+    }
+    if (timeMeta) {
+      card.appendChild(timeMeta);
+    }
+
+    const openDetail = () => openCmsHistoryDetail(item);
+    card.addEventListener("click", openDetail);
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openDetail();
+      }
+    });
+    cmsHistoryListEl.appendChild(card);
+  }
+}
+
+async function loadCmsHistory() {
+  try {
+    const response = await window.api.cmsListHistory();
+    if (!response.ok) {
+      renderCmsHistoryPlaceholder(response.message || "加载历史失败。");
+      return;
+    }
+    cmsState.history = Array.isArray(response.history) ? response.history : [];
+    renderCmsHistory();
+  } catch (error) {
+    renderCmsHistoryPlaceholder(`加载历史异常：${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function recordCmsHistory(detail) {
+  if (!detail || !detail.id) {
+    return;
+  }
+  try {
+    const response = await window.api.cmsRecordHistory(detail);
+    if (!response.ok) {
+      appendCmsConsole("记录历史失败", response);
+      return;
+    }
+    cmsState.history = Array.isArray(response.history) ? response.history : [];
+    renderCmsHistory();
+  } catch (error) {
+    appendCmsConsole("记录历史异常", error instanceof Error ? error.message : String(error));
+  }
+}
+
 function getEpisodeItems(detail) {
   if (!detail || !Array.isArray(detail.playSources)) {
     return [];
@@ -498,7 +609,7 @@ function getEpisodeItems(detail) {
 }
 
 function getCmsSourceDisplayName() {
-  return getSelectedCmsSource()?.name || "";
+  return cmsDetailState.source?.name || getSelectedCmsSource()?.name || "";
 }
 
 function getCmsDownloadGroupKeyFromName(name) {
@@ -781,7 +892,7 @@ function renderCmsDetail(detail) {
     ["演员", detail.actor],
     ["导演", detail.director],
     ["更新时间", detail.updateTime],
-    ["来源", `${getSelectedCmsSource()?.name || ""}${detail.id ? ` · ${detail.id}` : ""}`.trim()]
+    ["来源", `${getCmsSourceDisplayName()}${detail.id ? ` · ${detail.id}` : ""}`.trim()]
   ].forEach(([label, value]) => {
     const text = String(value || "").trim();
     if (!text) {
@@ -958,14 +1069,19 @@ function renderCmsDetail(detail) {
 
 
 async function loadCmsDetail(item) {
-  const source = getSelectedCmsSource();
+  const source = item && item.sourceId
+    ? cmsState.sources.find((candidate) => candidate.id === item.sourceId) || null
+    : getSelectedCmsSource();
   if (!source) {
-    setCmsDetailStatus("未选择资源站。");
+    setCmsPanel("list");
+    setCmsView("detail");
+    setCmsDetailStatus("历史记录对应资源站不存在，请重新配置资源站。");
+    cmsDetailBodyEl.innerHTML = '<div class="cms-placeholder">历史记录对应资源站不存在，请重新配置资源站。</div>';
     return;
   }
   const requestId = cmsDetailRequestId + 1;
   cmsDetailRequestId = requestId;
-  cmsDetailState = { item: null, loading: true };
+  cmsDetailState = { item: null, loading: true, source };
   setCmsView("detail");
   cmsPrevPageBtn.disabled = true;
   cmsNextPageBtn.disabled = true;
@@ -996,8 +1112,9 @@ async function loadCmsDetail(item) {
     }
 
     cmsDetailState = {
-      item: response.detail,
+      item: { ...response.detail, sourceId: source.id },
       loading: false,
+      source,
       episodeSelection: {},
       currentPlayingKey: "",
       currentPlayingLabel: "",
@@ -1005,7 +1122,10 @@ async function loadCmsDetail(item) {
       playerError: ""
     };
     setCmsDetailStatus(`详情已加载：${response.detail.name || item.name || "未命名影片"}`);
-    renderCmsDetail(response.detail);
+    const detail = { ...response.detail, sourceId: source.id };
+    cmsDetailState.item = detail;
+    renderCmsDetail(detail);
+    recordCmsHistory(detail);
   } catch (error) {
     if (requestId !== cmsDetailRequestId) {
       return;
@@ -1018,7 +1138,7 @@ async function loadCmsDetail(item) {
 }
 
 function backToCmsList() {
-  cmsDetailState = { item: null, loading: false, episodeSelection: {} };
+  cmsDetailState = { item: null, loading: false, episodeSelection: {}, source: null };
   setCmsDetailStatus("");
   setCmsView("list");
   renderCmsPagination();
@@ -1270,6 +1390,9 @@ function setCmsPanel(panelName) {
   document.querySelectorAll("[data-cms-panel]").forEach((button) => {
     button.classList.toggle("active", button.dataset.cmsPanel === panelName);
   });
+  if (panelName === "history") {
+    loadCmsHistory();
+  }
 }
 
 document.querySelectorAll("[data-cms-panel]").forEach((button) => {
@@ -1419,5 +1542,6 @@ window.api.onTaskUpdate((event, payload) => {
 
 setCmsConsoleCollapsed(true);
 updateCmsDownloadSummary();
+loadCmsHistory();
 loadCmsSources();
 

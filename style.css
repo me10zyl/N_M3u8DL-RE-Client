@@ -562,6 +562,7 @@ textarea {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
+  color: white !important;
 }
 
 .cms-source-picker-option-status {

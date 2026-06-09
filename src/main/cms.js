@@ -3,6 +3,8 @@ const https = require("https");
 
 const CMS_REQUEST_TIMEOUT_MS = 10000;
 const CMS_MAX_RESPONSE_BYTES = 1024 * 1024;
+const CMS_HISTORY_RETENTION_DAYS = 30;
+const CMS_HISTORY_RETENTION_MS = CMS_HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
 function createId() {
   return `cms-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -51,6 +53,75 @@ function normalizeSource(input = {}, existing = {}) {
   };
 }
 
+function normalizeHistoryDate(value) {
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function normalizeHistoryEntry(entry = {}) {
+  const sourceId = toSafeString(entry.sourceId, 64);
+  const id = toSafeString(entry.id || entry.vodId, 64);
+  const viewedTime = normalizeHistoryDate(entry.viewedAt);
+  if (!sourceId || !id || !viewedTime) {
+    return null;
+  }
+
+  return {
+    sourceId,
+    sourceName: toSafeString(entry.sourceName, 120),
+    id,
+    typeId: Number.parseInt(entry.typeId, 10) || 0,
+    name: toSafeString(entry.name || entry.title, 120),
+    pic: toSafeString(entry.pic || entry.poster, 500),
+    type: toSafeString(entry.type, 60),
+    year: toSafeString(entry.year, 20),
+    area: toSafeString(entry.area, 60),
+    remarks: toSafeString(entry.remarks, 120),
+    actor: toSafeString(entry.actor, 200),
+    director: toSafeString(entry.director, 120),
+    viewedAt: new Date(viewedTime).toISOString()
+  };
+}
+
+function pruneCmsHistory(history, now = Date.now()) {
+  const minTime = now - CMS_HISTORY_RETENTION_MS;
+  return (Array.isArray(history) ? history : [])
+    .map(normalizeHistoryEntry)
+    .filter(Boolean)
+    .filter((entry) => normalizeHistoryDate(entry.viewedAt) >= minTime)
+    .sort((left, right) => normalizeHistoryDate(right.viewedAt) - normalizeHistoryDate(left.viewedAt));
+}
+
+function buildCmsHistoryEntry(payload = {}, source, now = new Date()) {
+  if (!source || !source.id) {
+    return null;
+  }
+  return normalizeHistoryEntry({
+    ...payload,
+    sourceId: source.id,
+    sourceName: source.name,
+    viewedAt: now.toISOString()
+  });
+}
+
+function getCmsHistoryKey(entry) {
+  return `${entry.sourceId}:${entry.id}`;
+}
+
+function upsertCmsHistory(history, entry) {
+  if (!entry) {
+    return pruneCmsHistory(history);
+  }
+  const next = [entry];
+  const entryKey = getCmsHistoryKey(entry);
+  for (const item of pruneCmsHistory(history)) {
+    if (getCmsHistoryKey(item) !== entryKey) {
+      next.push(item);
+    }
+  }
+  return pruneCmsHistory(next);
+}
+
 function getCmsConfig(config) {
   const cms = config.cms && typeof config.cms === "object" ? config.cms : {};
   const sources = Array.isArray(cms.sources) ? cms.sources : Array.isArray(config.cmsSources) ? config.cmsSources : [];
@@ -61,7 +132,7 @@ function getCmsConfig(config) {
   return {
     activeSourceId,
     sources,
-    history: Array.isArray(cms.history) ? cms.history : []
+    history: pruneCmsHistory(Array.isArray(cms.history) ? cms.history : [])
   };
 }
 
@@ -513,6 +584,37 @@ function registerCmsIpc(ipcMain, store) {
   ipcMain.handle("cms:sources:list", () => {
     const cms = getCmsConfig(store.readConfig());
     return { ok: true, ...cms };
+  });
+
+  ipcMain.handle("cms:history:list", () => {
+    const config = store.readConfig();
+    const cms = getCmsConfig(config);
+    const rawHistory = config.cms && Array.isArray(config.cms.history) ? config.cms.history : [];
+    if (cms.history.length !== rawHistory.length) {
+      writeCmsConfig(store, cms);
+    }
+    return { ok: true, history: cms.history };
+  });
+
+  ipcMain.handle("cms:history:record", (event, payload = {}) => {
+    const config = store.readConfig();
+    const cms = getCmsConfig(config);
+    const source = cms.sources.find((item) => item.id === payload.sourceId) || null;
+    if (!source) {
+      return { ok: false, message: "未找到选中的资源站，无法记录历史。" };
+    }
+
+    const entry = buildCmsHistoryEntry(payload, source);
+    if (!entry) {
+      return { ok: false, message: "缺少影片历史必要字段。" };
+    }
+
+    const nextCms = {
+      ...cms,
+      history: upsertCmsHistory(cms.history, entry)
+    };
+    writeCmsConfig(store, nextCms);
+    return { ok: true, history: nextCms.history };
   });
 
   ipcMain.handle("cms:sources:save", (event, payload = {}) => {
