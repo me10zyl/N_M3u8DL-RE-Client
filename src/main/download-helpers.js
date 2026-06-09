@@ -83,9 +83,17 @@ function runDownloader(task, args, callbacks = {}) {
     child.on("close", (code) => { callbacks.onProcess?.(null); resolve(code); });
   });
 }
-function runFfmpegFirstFrame(url, outputPath) {
+function resolveFfmpegPath(exePath) {
+  const exeDirFfmpeg = exePath ? path.join(path.dirname(exePath), "ffmpeg.exe") : "";
+  if (exeDirFfmpeg && fs.existsSync(exeDirFfmpeg)) return exeDirFfmpeg;
+  const bundledFfmpeg = path.join(__dirname, "..", "..", "bin", "ffmpeg.exe");
+  if (fs.existsSync(bundledFfmpeg)) return bundledFfmpeg;
+  return "ffmpeg";
+}
+function runFfmpegFirstFrame(url, outputPath, exePath = "") {
   return new Promise((resolve, reject) => {
-    const child = spawn("ffmpeg", ["-y", "-ss", "0.1", "-i", url, "-frames:v", "1", "-f", "image2", outputPath], { windowsHide: true }); let stderr = "";
+    const ffmpegPath = resolveFfmpegPath(exePath);
+    const child = spawn(ffmpegPath, ["-y", "-ss", "0.1", "-i", url, "-frames:v", "1", "-f", "image2", outputPath], { windowsHide: true }); let stderr = "";
     child.stderr.on("data", (data) => { stderr += decodeOutput(data); });
     child.on("error", reject);
     child.on("close", (code) => code === 0 ? resolve() : reject(new Error(stderr.trim() || `ffmpeg exited with code ${code}`)));

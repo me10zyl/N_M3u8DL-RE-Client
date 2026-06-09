@@ -5,10 +5,10 @@ const { ensureDir, runFfmpegFirstFrame, parseMetaSelected } = require("./downloa
 function registerAdDebugIpc(ipcMain, { readConfig, getMainWindow }) {
   const notifyLog = (message) => { const win = getMainWindow?.(); if (win?.webContents) win.webContents.send("ad-debug:log", message); };
   ipcMain.handle("ad-debug:first-frame", async (event, payload) => {
-    const storedConfig = readConfig(); const tempRoot = payload?.tempRoot || storedConfig.tempRoot; const url = (payload?.url || "").trim();
+    const storedConfig = readConfig(); const exePath = payload?.exePath || storedConfig.exePath; const tempRoot = payload?.tempRoot || storedConfig.tempRoot; const url = (payload?.url || "").trim();
     if (!tempRoot || !url) return { ok: false, message: "缺少临时目录或片段 URL。" };
     const frameTmpDir = path.join(tempRoot, `ad-debug-frame-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`); const framePath = path.join(frameTmpDir, "first-frame.png");
-    try { ensureDir(frameTmpDir); await runFfmpegFirstFrame(url, framePath); const image = await fs.promises.readFile(framePath); return { ok: true, imageUrl: `data:image/png;base64,${image.toString("base64")}` }; }
+    try { ensureDir(frameTmpDir); await runFfmpegFirstFrame(url, framePath, exePath); const image = await fs.promises.readFile(framePath); return { ok: true, imageUrl: `data:image/png;base64,${image.toString("base64")}` }; }
     catch (error) { return { ok: false, message: error.message }; }
     finally { await fs.promises.rm(frameTmpDir, { recursive: true, force: true }); }
   });

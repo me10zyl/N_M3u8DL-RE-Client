@@ -22,7 +22,7 @@
     "extraResources": [
       {
         "from": "bin/ffmpeg.exe",
-        "to": "ffmpeg.exe"
+        "to": "bin/ffmpeg.exe"
       },
       {
         "from": "bin/N_m3u8DL-RE.exe",
