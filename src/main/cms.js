@@ -268,37 +268,50 @@ function parseVodPlaySources(value) {
     return [];
   }
 
-  return sourceText
-    .split("$$$")
-    .map((group) => {
-      const parts = String(group || "").split("$$");
-      const sourceName = toSafeString(parts[0], 80) || "默认线路";
-      const episodes = String(parts[1] || "")
-        .split("#")
-        .map((episode) => {
-          const [name, url] = String(episode || "").split("$");
-          const safeUrl = String(url || "").trim();
-          if (!safeUrl) {
-            return null;
-          }
-          return {
-            name: toSafeString(name, 120) || safeUrl,
-            url: safeUrl
-          };
-        })
-        .filter(Boolean);
+  const parseEpisodeList = (text) => String(text || "")
+    .split("#")
+    .map((episode) => {
+      const episodeText = String(episode || "").trim();
+      if (!episodeText) {
+        return null;
+      }
 
-      if (!episodes.length) {
+      const firstDollarIndex = episodeText.indexOf("$");
+      if (firstDollarIndex < 0) {
+        return null;
+      }
+
+      const name = episodeText.slice(0, firstDollarIndex).trim();
+      const url = episodeText.slice(firstDollarIndex + 1).trim();
+      if (!url) {
         return null;
       }
 
       return {
-        sourceName,
-        episodes
+        name: toSafeString(name, 120) || url,
+        url
       };
     })
     .filter(Boolean);
+
+  const sourceTextParts = sourceText.split("$$$");
+  const episodeText = sourceTextParts.length > 1
+    ? sourceTextParts[sourceTextParts.length - 1]
+    : sourceText;
+  const episodes = parseEpisodeList(episodeText);
+
+  if (!episodes.length) {
+    return [];
+  }
+
+  return [
+    {
+      sourceName: "默认线路",
+      episodes
+    }
+  ];
 }
+
 
 function normalizeCmsVideoDetail(item, sourceId) {
   const base = normalizeCmsVideo(item, sourceId);

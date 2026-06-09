@@ -61,7 +61,11 @@ let cmsSearchState = {
 let cmsDetailState = {
   item: null,
   loading: false,
-  episodeSelection: {}
+  episodeSelection: {},
+  currentPlayingKey: "",
+  currentPlayingLabel: "",
+  currentPlayingUrl: "",
+  playerError: ""
 };
 let cmsDownloadTaskState = {};
 let isCmsConsoleCollapsed = true;
@@ -417,11 +421,36 @@ function getEpisodeItems(detail) {
     return [];
   }
   return detail.playSources.flatMap((source) => source.episodes.map((episode) => ({
-    key: `${source.sourceName}$${episode.name}$${episode.url}`,
-    sourceName: source.sourceName,
+    key: `${episode.name}$${episode.url}`,
     name: episode.name,
     url: episode.url
   })));
+}
+
+function getCmsSourceDisplayName() {
+  return getSelectedCmsSource()?.name || "";
+}
+
+function buildEpisodeCopyText(episodes) {
+  return episodes
+    .map((episode) => `${episode.name}$${episode.url}`)
+    .join("\n");
+}
+
+async function copyEpisodesToClipboard(detail = cmsDetailState.item) {
+  const episodes = getEpisodeItems(detail);
+  if (!episodes.length) {
+    setCmsDetailStatus("暂无可复制链接。");
+    return;
+  }
+
+  const text = buildEpisodeCopyText(episodes);
+  try {
+    await navigator.clipboard.writeText(text);
+    setCmsDetailStatus(`已复制 ${episodes.length} 条链接。`);
+  } catch (error) {
+    setCmsDetailStatus(`复制失败：${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 function ensureCmsEpisodeSelection(detail) {
@@ -431,6 +460,13 @@ function ensureCmsEpisodeSelection(detail) {
     nextSelection[episode.key] = cmsDetailState.episodeSelection[episode.key] !== false;
   }
   cmsDetailState.episodeSelection = nextSelection;
+}
+
+function openEpisodeLink(episode) {
+  if (!episode || !episode.url) {
+    return;
+  }
+  window.open(episode.url, "_blank", "noopener,noreferrer");
 }
 
 function getSelectedCmsEpisodes(detail = cmsDetailState.item) {
@@ -509,13 +545,22 @@ function renderCmsDetail(detail) {
   const layout = document.createElement("div");
   layout.className = "cms-detail-body";
 
+  const aside = document.createElement("div");
+  aside.className = "cms-detail-aside";
   if (detail.pic) {
     const cover = document.createElement("img");
     cover.className = "cms-detail-cover";
     cover.src = detail.pic;
     cover.alt = detail.name || "影片封面";
-    layout.appendChild(cover);
+    aside.appendChild(cover);
   }
+  const copyM3u8Btn = document.createElement("button");
+  copyM3u8Btn.className = "btn small primary cms-detail-copy-btn";
+  copyM3u8Btn.type = "button";
+  copyM3u8Btn.textContent = "复制 m3u8 链接";
+  copyM3u8Btn.addEventListener("click", () => copyEpisodesToClipboard(detail));
+  aside.appendChild(copyM3u8Btn);
+  layout.appendChild(aside);
 
   const main = document.createElement("div");
   main.className = "cms-detail-main";
@@ -542,7 +587,7 @@ function renderCmsDetail(detail) {
     ["演员", detail.actor],
     ["导演", detail.director],
     ["更新时间", detail.updateTime],
-    ["来源", detail.sourceId]
+    ["来源", `${getSelectedCmsSource()?.name || ""}${detail.id ? ` · ${detail.id}` : ""}`.trim()]
   ].forEach(([label, value]) => {
     const text = String(value || "").trim();
     if (!text) {
@@ -600,17 +645,10 @@ function renderCmsDetail(detail) {
 
   const episodes = getEpisodeItems(detail);
   const episodeSection = document.createElement("section");
-  episodeSection.className = "cms-detail-section";
+  episodeSection.className = "cms-detail-section cms-detail-episode-section";
+
   const episodeTitle = document.createElement("h4");
   episodeTitle.textContent = `播放列表（已选 ${getSelectedCmsEpisodes(detail).length}/${episodes.length}）`;
-  const playSources = document.createElement("div");
-  playSources.className = "cms-detail-play-sources";
-  (Array.isArray(detail.playSources) ? detail.playSources : []).forEach((source) => {
-    const sourceTag = document.createElement("span");
-    sourceTag.className = "cms-detail-play-source";
-    sourceTag.textContent = source.sourceName;
-    playSources.appendChild(sourceTag);
-  });
 
   const toolbar = document.createElement("div");
   toolbar.className = "cms-detail-play-toolbar";
@@ -677,17 +715,34 @@ function renderCmsDetail(detail) {
     });
 
     const text = document.createElement("span");
-    text.textContent = `${episode.sourceName} · ${episode.name}`;
+    text.textContent = `${episode.name}`;
+
+    const urlLink = document.createElement("a");
+    urlLink.className = "cms-detail-episode-url";
+    urlLink.href = episode.url;
+    urlLink.target = "_blank";
+    urlLink.rel = "noreferrer";
+    urlLink.textContent = episode.url;
+
+    const playBtn = document.createElement("button");
+    playBtn.className = "btn small primary cms-detail-play-btn";
+    playBtn.textContent = "点击播放";
+    playBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      openEpisodeLink(episode);
+    });
+
+    const meta = document.createElement("div");
+    meta.className = "cms-detail-episode-meta";
+    meta.appendChild(text);
+    meta.appendChild(urlLink);
 
     label.appendChild(checkbox);
-    label.appendChild(text);
+    label.appendChild(meta);
+    label.appendChild(playBtn);
     episodeList.appendChild(label);
   });
 
-  if (playSources.childElementCount > 0) {
-    episodeSection.appendChild(playSources);
-  }
-  episodeSection.style["grid-column"] = "1 / -1";
   episodeSection.appendChild(episodeTitle);
   episodeSection.appendChild(toolbar);
   episodeSection.appendChild(episodeList);
@@ -696,6 +751,7 @@ function renderCmsDetail(detail) {
 
   cmsDetailBodyEl.appendChild(layout);
 }
+
 
 async function loadCmsDetail(item) {
   const source = getSelectedCmsSource();
@@ -737,7 +793,12 @@ async function loadCmsDetail(item) {
 
     cmsDetailState = {
       item: response.detail,
-      loading: false
+      loading: false,
+      episodeSelection: {},
+      currentPlayingKey: "",
+      currentPlayingLabel: "",
+      currentPlayingUrl: "",
+      playerError: ""
     };
     setCmsDetailStatus(`详情已加载：${response.detail.name || item.name || "未命名影片"}`);
     renderCmsDetail(response.detail);
@@ -995,6 +1056,9 @@ function setCmsPanel(panelName) {
   };
   for (const [name, panelId] of Object.entries(panelIds)) {
     document.getElementById(panelId).classList.toggle("hidden", name !== panelName);
+  }
+  if (panelName !== "list") {
+    setCmsView("list");
   }
   document.querySelectorAll("[data-cms-panel]").forEach((button) => {
     button.classList.toggle("active", button.dataset.cmsPanel === panelName);

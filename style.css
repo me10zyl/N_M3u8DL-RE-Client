@@ -720,10 +720,8 @@ textarea {
   overflow-wrap: anywhere;
 }
 
-.cms-detail-episode-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.cms-detail-episode-section {
+  grid-column: 1 / -1;
 }
 
 .cms-detail-play-toolbar {
@@ -733,11 +731,12 @@ textarea {
 }
 
 .cms-detail-episode {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
   max-width: 100%;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-radius: 10px;
   background: #ffffff;
   white-space: normal;
@@ -745,8 +744,30 @@ textarea {
 }
 
 .cms-detail-episode input[type="checkbox"] {
-  margin: 0;
+  margin: 4px 0 0;
   flex: 0 0 auto;
+}
+
+.cms-detail-episode-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cms-detail-episode-meta span {
+  color: #2f3d2d;
+  font-weight: 600;
+}
+
+.cms-detail-episode-url {
+  color: #2c6bd6;
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+.cms-detail-play-btn {
+  align-self: start;
 }
 
 @media (max-width: 720px) {
