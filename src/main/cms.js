@@ -380,7 +380,7 @@ function parseVodPlaySources(value, playFromValue = "") {
       episodes: parseEpisodeList(episodeText)
     }))
     .filter((source) => source.episodes.length > 0);
-  
+
   if (!rawSources.length) {
     return [];
   }

@@ -19,6 +19,7 @@
   },
   "build": {
     "asar": true,
+    "icon": "icon.png",
     "extraResources": [
       {
         "from": "bin/ffmpeg.exe",
