@@ -32,6 +32,7 @@ const confirmCmsDownloadNameBtn = document.getElementById("confirmCmsDownloadNam
 const cmsDownloadShowNameInput = document.getElementById("cmsDownloadShowNameInput");
 const cmsDownloadNameStatusEl = document.getElementById("cmsDownloadNameStatus");
 const cmsStopAllFromDetailBtn = document.getElementById("cmsStopAllFromDetailBtn");
+const cmsShutdownWhenDoneEl = document.getElementById("cmsShutdownWhenDone");
 const cmsDownloadSummaryEl = document.getElementById("cmsDownloadSummary");
 const cmsDownloadMiniListEl = document.getElementById("cmsDownloadMiniList");
 const cmsDownloadTaskListEl = document.getElementById("cmsDownloadTaskList");
@@ -91,6 +92,7 @@ let cmsDetailDownloadGroupKeys = {};
 let cmsPendingDownloadDetail = null;
 let cmsPendingDownloadEpisodes = [];
 let cmsHlsPlayer = null;
+let cmsShutdownRequested = false;
 let isCmsConsoleCollapsed = true;
 let cmsConsoleUnreadCount = 0;
 
@@ -987,6 +989,30 @@ function renderCmsDownloadTabs(groups, selectedEntries) {
   return tabs;
 }
 
+async function maybeShutdownWhenCmsDownloadsDone() {
+  if (!cmsShutdownWhenDoneEl.checked || cmsShutdownRequested) {
+    return;
+  }
+  const entries = Object.entries(cmsDownloadTaskState);
+  if (!entries.length) {
+    return;
+  }
+  const unfinished = entries.some(([, task]) => ["queued", "running"].includes(task.status || "queued"));
+  const hasDone = entries.some(([, task]) => task.status === "done");
+  if (unfinished || !hasDone) {
+    return;
+  }
+  cmsShutdownRequested = true;
+  cmsDownloadLogEl.textContent += "CMS 下载已全部结束，60 秒后自动关机。\n";
+  cmsDownloadLogEl.scrollTop = cmsDownloadLogEl.scrollHeight;
+  const response = await window.api.shutdownSystem();
+  if (!response.ok) {
+    cmsDownloadLogEl.textContent += `自动关机失败：${response.message || "未知错误"}\n`;
+    cmsDownloadLogEl.scrollTop = cmsDownloadLogEl.scrollHeight;
+    cmsShutdownRequested = false;
+  }
+}
+
 function updateCmsDownloadSummary() {
   const entries = Object.entries(cmsDownloadTaskState);
   if (!entries.length) {
@@ -1020,6 +1046,7 @@ function updateCmsDownloadSummary() {
     }
     cmsDownloadTaskListEl.appendChild(createCmsDownloadTaskRow(id, task));
   }
+  maybeShutdownWhenCmsDownloadsDone();
 }
 
 function renderCmsDetailDownloadInfo(detail) {
@@ -1729,6 +1756,17 @@ cmsPlayerModal.addEventListener("click", (event) => {
 cmsStopAllFromDetailBtn.addEventListener("click", async () => {
   await window.api.stopAll();
   cmsDownloadLogEl.textContent += "已请求停止所有下载任务。\n";
+});
+cmsShutdownWhenDoneEl.addEventListener("change", () => {
+  if (!cmsShutdownWhenDoneEl.checked) {
+    cmsShutdownRequested = false;
+    cmsDownloadLogEl.textContent += "已取消下载完成自动关机。\n";
+    cmsDownloadLogEl.scrollTop = cmsDownloadLogEl.scrollHeight;
+    return;
+  }
+  cmsDownloadLogEl.textContent += "已开启下载完成自动关机。\n";
+  cmsDownloadLogEl.scrollTop = cmsDownloadLogEl.scrollHeight;
+  maybeShutdownWhenCmsDownloadsDone();
 });
 
 window.api.onTaskUpdate((event, payload) => {

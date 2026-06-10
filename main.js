@@ -1,4 +1,5 @@
 const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { execFile } = require("child_process");
 const path = require("path");
 const { createConfigStore, registerConfigIpc } = require("./src/main/config");
 const { registerDialogIpc } = require("./src/main/dialogs");
@@ -20,6 +21,16 @@ function createWindow() {
   });
   mainWindow.loadFile(path.join(__dirname, "index.html"));
 }
+
+ipcMain.handle("system:shutdown", () => new Promise((resolve) => {
+  if (process.platform !== "win32") {
+    resolve({ ok: false, message: "Shutdown is only supported on Windows." });
+    return;
+  }
+  execFile("shutdown", ["/s", "/t", "60"], (error) => {
+    resolve(error ? { ok: false, message: error.message } : { ok: true });
+  });
+}));
 
 registerConfigIpc(ipcMain, configStore);
 registerDialogIpc(ipcMain, dialog, getMainWindow);
