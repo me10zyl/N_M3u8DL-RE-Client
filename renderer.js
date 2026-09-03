@@ -741,6 +741,7 @@ async function saveConfig() {
     useSystemProxy: useSystemProxyInput.checked,
     adSegmentThreshold: parseAdSegmentThreshold(adSegmentThresholdInput.value),
     adDurationSequence: adDurationSequenceInput.value,
+    adIndexSequence: adIndexSequenceInput.value,
     adDebugUrl: adDebugUrlInput.value.trim(),
     adDebugThreshold: parseAdSegmentThreshold(adDebugThresholdInput.value),
     adDebugSearch: adDebugSearchInput.value,
