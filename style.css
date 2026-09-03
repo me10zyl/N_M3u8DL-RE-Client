@@ -662,6 +662,7 @@ textarea {
 
 .cms-video-grid {
   display: grid;
+  margin-block-start: 10px;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 16px;
   min-height: 180px;
@@ -754,6 +755,7 @@ textarea {
 
 .cms-detail-body {
   display: grid;
+  margin-block-start: 10px;
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
   gap: 20px;
   align-items: start;
