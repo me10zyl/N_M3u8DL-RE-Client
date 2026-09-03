@@ -1,8 +1,9 @@
 const fs = require("fs");
 const path = require("path");
 const { ensureDir, runFfmpegFirstFrame, parseMetaSelected } = require("./download-helpers");
+const { detectAds } = require("./ad-detector");
 
-function registerAdDebugIpc(ipcMain, { readConfig, getMainWindow }) {
+function registerAdDebugIpc(ipcMain, { readConfig, writeConfig, getMainWindow }) {
   const notifyLog = (message) => { const win = getMainWindow?.(); if (win?.webContents) win.webContents.send("ad-debug:log", message); };
   ipcMain.handle("ad-debug:first-frame", async (event, payload) => {
     const storedConfig = readConfig(); const exePath = payload?.exePath || storedConfig.exePath; const tempRoot = payload?.tempRoot || storedConfig.tempRoot; const url = (payload?.url || "").trim();
@@ -11,6 +12,27 @@ function registerAdDebugIpc(ipcMain, { readConfig, getMainWindow }) {
     try { ensureDir(frameTmpDir); await runFfmpegFirstFrame(url, framePath, exePath); const image = await fs.promises.readFile(framePath); return { ok: true, imageUrl: `data:image/png;base64,${image.toString("base64")}` }; }
     catch (error) { return { ok: false, message: error.message }; }
     finally { await fs.promises.rm(frameTmpDir, { recursive: true, force: true }); }
+  });
+  ipcMain.handle("ad-debug:auto-detect", async (event, payload) => {
+    const storedConfig = readConfig();
+    const url = (payload?.url || "").trim();
+    if (!url) return { ok: false, message: "请先填写 m3u8 地址。" };
+    try {
+      return await detectAds({
+        url,
+        metaText: payload?.metaText || "",
+        durationSequence: payload?.durationSequence || "",
+        options: { ...(payload?.options || {}), timeoutMs: payload?.options?.frameTimeoutMs, concurrency: payload?.options?.concurrency },
+        onProgress: (progress) => notifyLog(`自动检测：${progress.completed}/${progress.total}${progress.index === undefined ? "" : `，当前 Index ${progress.index}`}\n`)
+      });
+    } catch (error) { return { ok: false, message: error.message }; }
+  });
+  ipcMain.handle("ad-debug:apply-config", async (event, payload) => {
+    try {
+      const config = readConfig();
+      const saved = writeConfig({ ...config, adIndexSequence: String(payload?.adIndexSequence || ""), adDurationSequence: String(payload?.adDurationSequence || "") });
+      return { ok: true, config: saved };
+    } catch (error) { return { ok: false, message: error.message }; }
   });
   ipcMain.handle("ad-debug:meta", async (event, payload) => {
     const storedConfig = readConfig(); const exePath = payload?.exePath || storedConfig.exePath; const tempRoot = payload?.tempRoot || storedConfig.tempRoot; const useSystemProxy = "useSystemProxy" in (payload || {}) ? payload.useSystemProxy === true : storedConfig.useSystemProxy === true; const url = (payload?.url || "").trim();

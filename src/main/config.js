@@ -71,6 +71,7 @@ function createConfig(app, parsed = {}) {
     useSystemProxy: parsed.useSystemProxy === true,
     adSegmentThreshold: normalizeAdSegmentThreshold(parsed.adSegmentThreshold),
     adDurationSequence: parsed.adDurationSequence || "",
+    adIndexSequence: parsed.adIndexSequence || "",
     adDebugUrl: parsed.adDebugUrl || "",
     adDebugThreshold: normalizeAdSegmentThreshold(parsed.adDebugThreshold || parsed.adSegmentThreshold),
     adDebugSearch: parsed.adDebugSearch || "",

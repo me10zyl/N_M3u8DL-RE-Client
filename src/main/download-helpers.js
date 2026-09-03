@@ -3,6 +3,7 @@ const path = require("path");
 const { spawn } = require("child_process");
 const iconv = require("iconv-lite");
 const { normalizeAdSegmentThreshold } = require("./config");
+const { addIndexSequenceFilenames } = require("./ad-detector");
 
 function ensureDir(dirPath) { fs.mkdirSync(dirPath, { recursive: true }); }
 async function moveEntry(sourcePath, targetPath) {
@@ -48,15 +49,16 @@ function addDurationSequenceFilenames(filenames, meta, durationSequence) {
   }
   return count;
 }
-function extractSuspiciousAdFilenames(meta, adSegmentThreshold = 5, durationSequence = "", useSegmentThreshold = true) {
-  const threshold = normalizeAdSegmentThreshold(adSegmentThreshold); const filenames = new Set(); if (!Array.isArray(meta)) return { filenames: [], durationMatchCount: 0 };
+function extractSuspiciousAdFilenames(meta, adSegmentThreshold = 5, durationSequence = "", useSegmentThreshold = true, indexSequence = "") {
+  const threshold = normalizeAdSegmentThreshold(adSegmentThreshold); const filenames = new Set(); if (!Array.isArray(meta)) return { filenames: [], durationMatchCount: 0, indexMatchCount: 0, invalidIndexSequence: [] };
   for (const item of meta) for (const part of (item?.Playlist?.MediaParts || [])) {
     const segments = Array.isArray(part?.MediaSegments) ? part.MediaSegments : [];
     if (!useSegmentThreshold || segments.length === 0 || segments.length >= threshold) continue;
     for (const segment of segments) addFilename(filenames, segment);
   }
   const durationMatchCount = addDurationSequenceFilenames(filenames, meta, durationSequence);
-  return { filenames: [...filenames], durationMatchCount };
+  const indexResult = addIndexSequenceFilenames(filenames, meta, indexSequence);
+  return { filenames: [...filenames], durationMatchCount, indexMatchCount: indexResult.count, invalidIndexSequence: indexResult.invalid };
 }
 async function findNewestFile(rootDir, targetName) {
   let newest = null;
@@ -110,11 +112,13 @@ async function prepareAdKeyword(task, callbacks = {}) {
   const parseTmpDir = path.join(path.dirname(task.tempShowDir), `${path.basename(task.tempShowDir)}.${task.saveName}.parse`);
   callbacks.onTaskLog?.(`去广告解析：先跳过下载并生成 meta_selected.json，片段阈值 ${task.adSegmentThreshold}。\n`);
   const parsed = await parseMetaSelected(task, parseTmpDir, callbacks); if (!parsed) return "";
-  const { filenames, durationMatchCount } = extractSuspiciousAdFilenames(JSON.parse(parsed.metaText), task.adSegmentThreshold, task.adDurationSequence, task.removeAds);
+  const { filenames, durationMatchCount, indexMatchCount, invalidIndexSequence } = extractSuspiciousAdFilenames(JSON.parse(parsed.metaText), task.adSegmentThreshold, task.adDurationSequence, task.removeAds, task.adIndexSequence);
   await fs.promises.rm(parseTmpDir, { recursive: true, force: true });
   if (durationMatchCount > 0) callbacks.onTaskLog?.(`去广告解析：duration 序列匹配 ${durationMatchCount} 次，已加入对应分片。\n`);
+  if (indexMatchCount > 0) callbacks.onTaskLog?.(`去广告解析：Index 序列已启用，共覆盖 ${indexMatchCount} 个 Index。\n`);
+  if (invalidIndexSequence.length > 0) callbacks.onTaskLog?.(`去广告解析：忽略无效 Index 规则：${invalidIndexSequence.join(", ")}。\n`);
   if (filenames.length === 0) { callbacks.onTaskLog?.("去广告解析完成：未发现可疑广告分片，将正常下载。\n"); return ""; }
   callbacks.onTaskLog?.(`去广告解析完成：发现 ${filenames.length} 个可疑广告分片。\n`);
   return filenames.map(escapeRegex).join("|");
 }
-module.exports = { ensureDir, moveDirectoryContents, parseDurationSequence, buildDownloadArgs, runDownloader, runFfmpegFirstFrame, parseMetaSelected, prepareAdKeyword };
+module.exports = { ensureDir, moveDirectoryContents, parseDurationSequence, buildDownloadArgs, runDownloader, runFfmpegFirstFrame, parseMetaSelected, prepareAdKeyword, extractSuspiciousAdFilenames };

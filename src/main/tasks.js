@@ -20,7 +20,7 @@ function createTaskQueue({ getMainWindow, readConfig }) {
     try {
       ensureDir(task.tempShowDir); ensureDir(task.finalShowDir);
       const extraArgs = ["--use-system-proxy", task.useSystemProxy ? "true" : "false"];
-      if (task.removeAds || parseDurationSequence(task.adDurationSequence).length > 0) {
+      if (task.removeAds || parseDurationSequence(task.adDurationSequence).length > 0 || String(task.adIndexSequence || "").trim()) {
         const adKeyword = await prepareAdKeyword(task, callbacksFor(task));
         if (task.cancelled) { notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "cancelled" }); return; }
         if (adKeyword) extraArgs.push("--ad-keyword", adKeyword);
@@ -38,17 +38,17 @@ function createTaskQueue({ getMainWindow, readConfig }) {
 
   function register(ipcMain) {
     ipcMain.handle("tasks:start", (event, payload) => {
-      let { exePath, tempRoot, finalRoot, showName, pageId, removeAds, useSystemProxy, adSegmentThreshold, adDurationSequence, items } = payload;
+      let { exePath, tempRoot, finalRoot, showName, pageId, removeAds, useSystemProxy, adSegmentThreshold, adDurationSequence, adIndexSequence, items } = payload;
       const normalizedShow = (showName || "").trim(); const storedConfig = readConfig();
       exePath = exePath || storedConfig.exePath; tempRoot = tempRoot || storedConfig.tempRoot; finalRoot = finalRoot || storedConfig.finalRoot || storedConfig.defaultFinalRoot; pageId = pageId || storedConfig.activePageId;
-      removeAds = removeAds !== false; useSystemProxy = useSystemProxy === true; adSegmentThreshold = normalizeAdSegmentThreshold(adSegmentThreshold || storedConfig.adSegmentThreshold); adDurationSequence = adDurationSequence || storedConfig.adDurationSequence || "";
+      removeAds = removeAds !== false; useSystemProxy = useSystemProxy === true; adSegmentThreshold = normalizeAdSegmentThreshold(adSegmentThreshold || storedConfig.adSegmentThreshold); adDurationSequence = adDurationSequence || storedConfig.adDurationSequence || ""; adIndexSequence = adIndexSequence || storedConfig.adIndexSequence || "";
       if (!exePath || !tempRoot || !finalRoot || !normalizedShow) return { ok: false, message: "Missing required settings." };
       if (!fs.existsSync(exePath)) return { ok: false, message: "N_m3u8DL-RE.exe not found. Please set the path in Settings." };
       const tasks = [];
       for (const item of items || []) {
         const episodeTitle = (item.episodeTitle || "").trim(); const url = (item.url || "").trim(); if (!episodeTitle || !url) continue;
         const safeEpisode = episodeTitle.replace(/[\\/:*?"<>|]/g, "_"); const safeShow = normalizedShow.replace(/[\\/:*?"<>|]/g, "_");
-        tasks.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, pageId, exePath, url, tempShowDir: path.join(tempRoot, normalizedShow), finalShowDir: path.join(finalRoot, normalizedShow), saveName: `${safeShow}_${safeEpisode}`, removeAds, useSystemProxy, adSegmentThreshold, adDurationSequence });
+        tasks.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, pageId, exePath, url, tempShowDir: path.join(tempRoot, normalizedShow), finalShowDir: path.join(finalRoot, normalizedShow), saveName: `${safeShow}_${safeEpisode}`, removeAds, useSystemProxy, adSegmentThreshold, adDurationSequence, adIndexSequence });
       }
       if (tasks.length === 0) return { ok: false, message: "No valid tasks." };
       queue.push(...tasks); for (const task of tasks) notifyTaskUpdate({ id: task.id, pageId: task.pageId, status: "queued", name: task.saveName }); runNext(); return { ok: true, tasks };

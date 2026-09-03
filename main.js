@@ -34,7 +34,7 @@ ipcMain.handle("system:shutdown", () => new Promise((resolve) => {
 
 registerConfigIpc(ipcMain, configStore);
 registerDialogIpc(ipcMain, dialog, getMainWindow);
-registerAdDebugIpc(ipcMain, { readConfig: configStore.readConfig, getMainWindow });
+registerAdDebugIpc(ipcMain, { readConfig: configStore.readConfig, writeConfig: configStore.writeConfig, getMainWindow });
 createTaskQueue({ getMainWindow, readConfig: configStore.readConfig }).register(ipcMain);
 registerCmsIpc(ipcMain, configStore);
 registerShellIpc(ipcMain, shell);

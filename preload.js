@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld("api", {
   removeTask: (id) => ipcRenderer.invoke("tasks:remove", id),
   debugAdMeta: (payload) => ipcRenderer.invoke("ad-debug:meta", payload),
   debugAdFirstFrame: (payload) => ipcRenderer.invoke("ad-debug:first-frame", payload),
+  autoDetectAds: (payload) => ipcRenderer.invoke("ad-debug:auto-detect", payload),
+  applyAdDebugConfig: (payload) => ipcRenderer.invoke("ad-debug:apply-config", payload),
   cmsListSources: () => ipcRenderer.invoke("cms:sources:list"),
   cmsListCategories: (payload) => ipcRenderer.invoke("cms:categories", payload),
   cmsSaveSource: (payload) => ipcRenderer.invoke("cms:sources:save", payload),

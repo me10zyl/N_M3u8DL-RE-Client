@@ -230,6 +230,10 @@
                 <span>去广告 duration 序列</span>
                 <textarea id="adDurationSequence" placeholder="匹配到该 duration 序列时，将对应 ts 加入去广告 keyword"></textarea>
               </label>
+              <label class="field">
+                <span>去广告 Index 序列</span>
+                <textarea id="adIndexSequence" placeholder="例如：89-93;150,152,155-157"></textarea>
+              </label>
             </div>
             <div class="actions">
               <button id="openAdDebug" class="btn">调试去广告</button>
@@ -319,6 +323,20 @@
           </label>
           <button id="findDurationSequence" class="btn">定位 duration 序列</button>
         </div>
+        <section class="ad-debug-auto card">
+          <h3>自动检测疑似广告</h3>
+          <div class="ad-debug-toolbar">
+            <label class="field inline-field"><span>模式</span><select id="adDetectMode"><option value="strict">严格</option><option value="loose">宽松</option></select></label>
+            <label class="field inline-field small-number-field"><span>最小时长</span><input id="adDetectMinSeconds" type="number" min="0.1" step="0.1" value="5"></label>
+            <label class="field inline-field small-number-field"><span>最大时长</span><input id="adDetectMaxSeconds" type="number" min="1" step="1" value="90"></label>
+            <label class="field inline-field small-number-field"><span>相邻码率倍数</span><input id="adDetectNeighborRatio" type="number" min="1" step="0.1" value="1.7"></label>
+            <label class="field inline-field small-number-field"><span>中位码率倍数</span><input id="adDetectMedianRatio" type="number" min="1" step="0.1" value="1.5"></label>
+            <label class="field inline-field small-number-field"><span>最多片段数</span><input id="adDetectMaxSegments" type="number" min="1" step="1" value="5"></label>
+            <label class="field inline-field checkbox-field"><input id="adDetectRequireDiscontinuity" type="checkbox" checked><span>要求 discontinuity</span></label>
+          </div>
+          <div class="actions"><button id="autoDetectAds" class="btn primary" type="button">自动检测疑似广告</button><span id="adDetectStatus" class="status"></span></div>
+          <div id="adDetectResults" class="ad-detect-results"></div>
+        </section>
         <div id="adDebugStatus" class="status"></div>
         <div class="ad-debug-content">
           <pre id="adDebugMeta" class="log meta-log"></pre>

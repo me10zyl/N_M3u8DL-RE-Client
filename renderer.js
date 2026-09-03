@@ -7,6 +7,7 @@ const removeAdsInput = document.getElementById("removeAds");
 const useSystemProxyInput = document.getElementById("useSystemProxy");
 const adSegmentThresholdInput = document.getElementById("adSegmentThreshold");
 const adDurationSequenceInput = document.getElementById("adDurationSequence");
+const adIndexSequenceInput = document.getElementById("adIndexSequence");
 const batchInput = document.getElementById("batchInput");
 const startBtn = document.getElementById("startBtn");
 const cancelBtn = document.getElementById("cancelBtn");
@@ -46,6 +47,16 @@ const adDebugThresholdInput = document.getElementById("adDebugThreshold");
 const findAdSegmentsBtn = document.getElementById("findAdSegments");
 const durationSequenceInput = document.getElementById("durationSequence");
 const findDurationSequenceBtn = document.getElementById("findDurationSequence");
+const adDetectModeInput = document.getElementById("adDetectMode");
+const adDetectMinSecondsInput = document.getElementById("adDetectMinSeconds");
+const adDetectMaxSecondsInput = document.getElementById("adDetectMaxSeconds");
+const adDetectNeighborRatioInput = document.getElementById("adDetectNeighborRatio");
+const adDetectMedianRatioInput = document.getElementById("adDetectMedianRatio");
+const adDetectMaxSegmentsInput = document.getElementById("adDetectMaxSegments");
+const adDetectRequireDiscontinuityInput = document.getElementById("adDetectRequireDiscontinuity");
+const autoDetectAdsBtn = document.getElementById("autoDetectAds");
+const adDetectStatus = document.getElementById("adDetectStatus");
+const adDetectResultsEl = document.getElementById("adDetectResults");
 const adDebugStatus = document.getElementById("adDebugStatus");
 const adDebugMetaEl = document.getElementById("adDebugMeta");
 const adDebugResultEl = document.getElementById("adDebugResult");
@@ -376,6 +387,47 @@ function setAdDebugStatus(message) {
   adDebugStatus.textContent = message || "";
 }
 
+function setAdDetectStatus(message) {
+  adDetectStatus.textContent = message || "";
+}
+
+function formatAdDetectTime(value) {
+  const seconds = Number(value) || 0;
+  const minutes = Math.floor(seconds / 60);
+  return `${String(minutes).padStart(2, "0")}:${(seconds % 60).toFixed(3).padStart(6, "0")}`;
+}
+
+async function loadAdDetectFrame(image, url, label) {
+  image.alt = `${label} 首帧`;
+  try {
+    image.src = await captureAdDebugFirstFrame(url);
+    image.classList.remove("hidden");
+  } catch (error) {
+    image.alt = `${label} 首帧获取失败：${error.message}`;
+  }
+}
+
+function renderAdDetectResults(candidates) {
+  adDetectResultsEl.innerHTML = "";
+  if (!candidates.length) { adDetectResultsEl.textContent = "未发现疑似广告区间"; return; }
+  for (const candidate of candidates) {
+    const card = document.createElement("article"); card.className = "ad-detect-card";
+    const heading = document.createElement("h4"); heading.textContent = `疑似广告：${candidate.startIndex}-${candidate.endIndex}（评分 ${candidate.score}）`; card.appendChild(heading);
+    const details = document.createElement("p"); details.textContent = `Index：${candidate.indexSequence} ｜ duration：${candidate.durationSequence} ｜ 时间：${formatAdDetectTime(candidate.startTime)} - ${formatAdDetectTime(candidate.endTime)} ｜ 码率：${candidate.bitrateKbps} kbps`; card.appendChild(details);
+    const reasons = document.createElement("ul"); for (const reason of candidate.reasons || []) { const item = document.createElement("li"); item.textContent = reason; reasons.appendChild(item); } card.appendChild(reasons);
+    const preview = document.createElement("img"); preview.className = "ad-detect-frame"; preview.width = 320; preview.height = 180; preview.alt = "正在获取首帧"; card.appendChild(preview);
+    if (candidate.segments[0]) loadAdDetectFrame(preview, candidate.segments[0].url, `Index ${candidate.segments[0].index}`);
+    const actions = document.createElement("div"); actions.className = "actions";
+    const expand = document.createElement("button"); expand.className = "btn small"; expand.type = "button"; expand.textContent = "展开全部画面";
+    const frames = document.createElement("div"); frames.className = "ad-detect-frames hidden";
+    expand.addEventListener("click", async () => { expand.disabled = true; frames.classList.remove("hidden"); for (const segment of candidate.segments) { const figure = document.createElement("figure"); figure.className = "ad-detect-frame-item"; const image = document.createElement("img"); image.className = "ad-detect-frame"; image.width = 240; image.height = 135; const caption = document.createElement("figcaption"); caption.textContent = `Index ${segment.index} ｜ ${segment.duration}s ｜ ${segment.hash}`; figure.append(image, caption); frames.appendChild(figure); await loadAdDetectFrame(image, segment.url, `Index ${segment.index}`); } });
+    const apply = document.createElement("button"); apply.className = "btn primary small"; apply.type = "button"; apply.textContent = "一键应用到配置";
+    apply.addEventListener("click", async () => { apply.disabled = true; const response = await window.api.applyAdDebugConfig({ adIndexSequence: candidate.indexSequence, adDurationSequence: candidate.durationSequence }); apply.disabled = false; if (!response.ok) { setAdDetectStatus(response.message || "配置应用失败"); return; } adIndexSequenceInput.value = candidate.indexSequence; adDurationSequenceInput.value = candidate.durationSequence; setAdDetectStatus(`已覆盖应用：Index ${candidate.indexSequence}`); });
+    actions.append(expand, apply); card.append(actions, frames);
+    const segmentLog = document.createElement("pre"); segmentLog.className = "ad-detect-segments"; segmentLog.textContent = candidate.segments.map((segment) => `Index ${segment.index} | duration=${segment.duration} | hash=${segment.hash}\n${segment.url}`).join("\n\n"); card.appendChild(segmentLog); adDetectResultsEl.appendChild(card);
+  }
+}
+
 function appendAdDebugLog(message) {
   adDebugResultHintEl.classList.add("hidden");
   adDebugResultEl.textContent = `${adDebugResultEl.textContent || ""}${message || ""}`;
@@ -640,6 +692,7 @@ async function loadConfig() {
   useSystemProxyInput.checked = config.useSystemProxy === true;
   adSegmentThresholdInput.value = String(parseAdSegmentThreshold(config.adSegmentThreshold));
   adDurationSequenceInput.value = config.adDurationSequence || "";
+  adIndexSequenceInput.value = config.adIndexSequence || "";
   adDebugUrlInput.value = config.adDebugUrl || "";
   adDebugThresholdInput.value = String(parseAdSegmentThreshold(config.adDebugThreshold || config.adSegmentThreshold));
   adDebugSearchInput.value = config.adDebugSearch || "";
@@ -753,6 +806,7 @@ startBtn.addEventListener("click", async () => {
     useSystemProxy: useSystemProxyInput.checked,
     adSegmentThreshold,
     adDurationSequence: adDurationSequenceInput.value,
+    adIndexSequence: adIndexSequenceInput.value,
     items: selectedItems
   });
 
@@ -839,7 +893,34 @@ copyAdDebugMetaBtn.addEventListener("click", async () => {
   setAdDebugStatus("已复制 meta_selected.json");
 });
 adDurationSequenceInput.addEventListener("input", () => saveConfig());
+adIndexSequenceInput.addEventListener("input", () => saveConfig());
 adDebugUrlInput.addEventListener("input", () => saveConfig());
+autoDetectAdsBtn.addEventListener("click", async () => {
+  const url = adDebugUrlInput.value.trim();
+  if (!url) { setAdDetectStatus("请输入 m3u8 地址"); return; }
+  autoDetectAdsBtn.disabled = true;
+  setAdDetectStatus("正在自动检测并下载分析片段...");
+  const response = await window.api.autoDetectAds({
+    url,
+    metaText: adDebugMetaText,
+    useSystemProxy: useSystemProxyInput.checked,
+    durationSequence: durationSequenceInput.value,
+    options: {
+      mode: adDetectModeInput.value,
+      minAdSeconds: Number(adDetectMinSecondsInput.value),
+      maxAdSeconds: Number(adDetectMaxSecondsInput.value),
+      neighborBitrateRatio: Number(adDetectNeighborRatioInput.value),
+      medianBitrateRatio: Number(adDetectMedianRatioInput.value),
+      maxGroupSegments: Number(adDetectMaxSegmentsInput.value),
+      requireDiscontinuity: adDetectRequireDiscontinuityInput.checked,
+      timeoutMs: 30000
+    }
+  });
+  autoDetectAdsBtn.disabled = false;
+  if (!response.ok) { setAdDetectStatus(response.message || "自动检测失败"); return; }
+  renderAdDetectResults(response.candidates || []);
+  setAdDetectStatus(`检测完成：发现 ${(response.candidates || []).length} 个候选区间，中位码率 ${Number(response.medianBitrateKbps || 0).toFixed(0)} kbps`);
+});
 adDebugThresholdInput.addEventListener("input", () => saveConfig());
 durationSequenceInput.addEventListener("input", () => saveConfig());
 adDebugPrevBtn.addEventListener("click", () => moveAdDebugSearch(-1));

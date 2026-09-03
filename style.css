@@ -985,3 +985,96 @@ textarea {
     max-width: 100%;
   }
 }
+
+.ad-debug-auto {
+  margin: 16px 0;
+  padding: 16px;
+  background: #f7f4ef;
+  box-shadow: none;
+  border: 1px solid #ede7dd;
+}
+
+.ad-debug-auto h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.ad-detect-results {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.ad-detect-card {
+  padding: 14px;
+  border: 1px solid #e1d8ca;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.ad-detect-card h4 {
+  margin: 0 0 8px;
+  color: #355c3b;
+}
+
+.ad-detect-card p {
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.ad-detect-card ul {
+  margin: 8px 0;
+  padding-left: 22px;
+  color: #5e5e5e;
+  font-size: 13px;
+}
+
+.ad-detect-frame {
+  display: block;
+  width: min(320px, 100%);
+  height: auto;
+  min-height: 80px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #1f1f1f;
+  margin-top: 10px;
+}
+
+.ad-detect-frames {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.ad-detect-frame-item {
+  margin: 0;
+  min-width: 0;
+}
+
+.ad-detect-frame-item .ad-detect-frame {
+  width: 100%;
+  min-height: 60px;
+  margin-top: 0;
+}
+
+.ad-detect-frame-item figcaption {
+  margin-top: 4px;
+  color: #5e5e5e;
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.ad-detect-segments {
+  max-height: 180px;
+  margin: 12px 0 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: #f6f1e8;
+  color: #5a4b36;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 11px;
+}
