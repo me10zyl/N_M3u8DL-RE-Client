@@ -248,11 +248,12 @@ async function detectAds({ url, metaText = "", durationSequence = "", options = 
 function addIndexSequenceFilenames(filenames, meta, value) {
   const parsed = parseIndexSequence(value);
   const indexes = new Set(parsed.indexes);
+  let matchedCount = 0;
   for (const group of getMetaSegments(meta)) for (const segment of group) if (indexes.has(segment.index)) {
     const filename = getSegmentFilename(segment.url);
-    if (filename) filenames.add(filename);
+    if (filename) { filenames.add(filename); matchedCount += 1; }
   }
-  return { count: indexes.size, invalid: parsed.invalid };
+  return { count: matchedCount, invalid: parsed.invalid };
 }
 
 module.exports = { parseDurationSequence, parseIndexSequence, formatIndexSequence, getSegmentHash, detectAds, addIndexSequenceFilenames };
