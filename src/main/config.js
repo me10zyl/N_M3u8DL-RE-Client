@@ -72,6 +72,7 @@ function createConfig(app, parsed = {}) {
     adSegmentThreshold: normalizeAdSegmentThreshold(parsed.adSegmentThreshold),
     adDurationSequence: parsed.adDurationSequence || "",
     adIndexSequence: parsed.adIndexSequence || "",
+    showAdPreviewOnCmsDownload: parsed.showAdPreviewOnCmsDownload === true,
     adDebugUrl: parsed.adDebugUrl || "",
     adDebugThreshold: normalizeAdSegmentThreshold(parsed.adDebugThreshold || parsed.adSegmentThreshold),
     adDebugSearch: parsed.adDebugSearch || "",

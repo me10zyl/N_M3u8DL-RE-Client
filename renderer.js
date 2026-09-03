@@ -4,6 +4,7 @@ const tempRootInput = document.getElementById("tempRoot");
 const finalRootInput = document.getElementById("finalRoot");
 const defaultFinalRootInput = document.getElementById("defaultFinalRoot");
 const removeAdsInput = document.getElementById("removeAds");
+const showAdPreviewOnCmsDownloadInput = document.getElementById("showAdPreviewOnCmsDownload");
 const useSystemProxyInput = document.getElementById("useSystemProxy");
 const adSegmentThresholdInput = document.getElementById("adSegmentThreshold");
 const adDurationSequenceInput = document.getElementById("adDurationSequence");
@@ -439,6 +440,32 @@ function clearAdDebugPreview() {
   adDebugPreviewEl.classList.add("hidden");
 }
 
+function resetAdDebugSession(url = "") {
+  adDebugUrlInput.value = url;
+  adDebugMetaText = "";
+  adDebugMeta = null;
+  adDebugSearchMatches = [];
+  adDebugSearchIndex = -1;
+  adDebugSearchInput.value = "";
+  adDebugTimeInput.value = "";
+  adDebugMetaEl.textContent = "";
+  adDebugResultEl.textContent = "";
+  adDebugResultHintEl.classList.add("hidden");
+  adDetectResultsEl.innerHTML = "";
+  setAdDebugStatus("");
+  setAdDetectStatus("");
+  clearAdDebugPreview();
+}
+
+window.openAdDebugForUrl = (url) => {
+  if (!/^https?:\/\//i.test(String(url || ""))) return false;
+  resetAdDebugSession(String(url).trim());
+  if (!adDebugThresholdInput.value) adDebugThresholdInput.value = adSegmentThresholdInput.value || "5";
+  adDebugModal.classList.remove("hidden");
+  adDebugUrlInput.focus();
+  return true;
+};
+
 async function captureAdDebugFirstFrame(url) {
   console.debug("[ad-debug] ffmpeg first frame start", { url });
   const response = await window.api.debugAdFirstFrame({
@@ -689,6 +716,7 @@ async function loadConfig() {
     }
   }
   removeAdsInput.checked = config.removeAds !== false;
+  showAdPreviewOnCmsDownloadInput.checked = config.showAdPreviewOnCmsDownload === true;
   useSystemProxyInput.checked = config.useSystemProxy === true;
   adSegmentThresholdInput.value = String(parseAdSegmentThreshold(config.adSegmentThreshold));
   adDurationSequenceInput.value = config.adDurationSequence || "";
@@ -709,6 +737,7 @@ async function saveConfig() {
     tempRoot: tempRootInput.value.trim(),
     defaultFinalRoot: defaultFinalRootInput.value.trim(),
     removeAds: removeAdsInput.checked,
+    showAdPreviewOnCmsDownload: showAdPreviewOnCmsDownloadInput.checked,
     useSystemProxy: useSystemProxyInput.checked,
     adSegmentThreshold: parseAdSegmentThreshold(adSegmentThresholdInput.value),
     adDurationSequence: adDurationSequenceInput.value,
@@ -803,6 +832,7 @@ startBtn.addEventListener("click", async () => {
     tempRoot,
     finalRoot,
     removeAds: removeAdsInput.checked,
+    showAdPreviewOnCmsDownload: showAdPreviewOnCmsDownloadInput.checked,
     useSystemProxy: useSystemProxyInput.checked,
     adSegmentThreshold,
     adDurationSequence: adDurationSequenceInput.value,
@@ -1026,6 +1056,7 @@ defaultFinalRootInput.addEventListener("input", () => {
 });
 finalRootInput.addEventListener("input", () => saveConfig());
 removeAdsInput.addEventListener("change", () => saveConfig());
+showAdPreviewOnCmsDownloadInput.addEventListener("change", () => saveConfig());
 useSystemProxyInput.addEventListener("change", () => saveConfig());
 adSegmentThresholdInput.addEventListener("input", () => saveConfig());
 batchInput.addEventListener("input", () => {

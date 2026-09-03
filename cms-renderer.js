@@ -31,6 +31,9 @@ const cancelCmsDownloadNameBtn = document.getElementById("cancelCmsDownloadNameB
 const confirmCmsDownloadNameBtn = document.getElementById("confirmCmsDownloadNameBtn");
 const cmsDownloadShowNameInput = document.getElementById("cmsDownloadShowNameInput");
 const cmsDownloadNameStatusEl = document.getElementById("cmsDownloadNameStatus");
+const cmsAdPreviewEl = document.getElementById("cmsAdPreview");
+const cmsAdPreviewStatusEl = document.getElementById("cmsAdPreviewStatus");
+const cmsAdPreviewFramesEl = document.getElementById("cmsAdPreviewFrames");
 const cmsStopAllFromDetailBtn = document.getElementById("cmsStopAllFromDetailBtn");
 const cmsShutdownWhenDoneEl = document.getElementById("cmsShutdownWhenDone");
 const cmsDownloadSummaryEl = document.getElementById("cmsDownloadSummary");
@@ -92,6 +95,7 @@ let cmsDetailDownloadGroupKeys = {};
 let cmsPendingDownloadDetail = null;
 let cmsPendingDownloadEpisodes = [];
 let cmsHlsPlayer = null;
+let cmsAdPreviewToken = 0;
 let cmsShutdownRequested = false;
 let isCmsConsoleCollapsed = true;
 let cmsConsoleUnreadCount = 0;
@@ -659,7 +663,61 @@ function getCmsDetailDownloadGroupKeys(detail) {
   return keys;
 }
 
+function invalidateCmsAdPreview() {
+  cmsAdPreviewToken += 1;
+}
+
+function resetCmsAdPreview() {
+  invalidateCmsAdPreview();
+  cmsAdPreviewEl.classList.add("hidden");
+  cmsAdPreviewStatusEl.textContent = "";
+  cmsAdPreviewFramesEl.innerHTML = "";
+}
+
+function getFirstSelectedCmsEpisode(episodes) {
+  return episodes.find((episode) => /^https?:\/\//i.test(String(episode.url || "").trim())) || null;
+}
+
+async function loadCmsAdPreview(detail, episodes) {
+  const token = ++cmsAdPreviewToken;
+  const config = await window.api.getConfig();
+  if (token !== cmsAdPreviewToken || !cmsDownloadNameModal || cmsDownloadNameModal.classList.contains("hidden")) return;
+  const hasRule = config.removeAds === true || String(config.adIndexSequence || "").trim() || String(config.adDurationSequence || "").trim();
+  if (config.showAdPreviewOnCmsDownload !== true || !hasRule) return;
+  const episode = getFirstSelectedCmsEpisode(episodes);
+  if (!episode) return;
+  cmsAdPreviewEl.classList.remove("hidden");
+  cmsAdPreviewStatusEl.textContent = "正在按当前配置解析广告片段…";
+  const response = await window.api.previewConfiguredAds({ url: episode.url });
+  if (token !== cmsAdPreviewToken || cmsDownloadNameModal.classList.contains("hidden")) return;
+  if (!response.ok) { cmsAdPreviewStatusEl.textContent = `广告预览失败：${response.message || "未知错误"}`; return; }
+  if (!response.matched || !response.segments.length) { cmsAdPreviewStatusEl.textContent = "未匹配到当前配置的广告片段"; return; }
+  cmsAdPreviewStatusEl.textContent = `正在获取 ${response.segments.length} 张广告首帧…`;
+  let completed = 0;
+  let failed = 0;
+  let cursor = 0;
+  async function loadNextFrame() {
+    while (cursor < response.segments.length && token === cmsAdPreviewToken) {
+      const segment = response.segments[cursor++];
+      const card = document.createElement("figure"); card.className = "cms-ad-preview-frame";
+      const image = document.createElement("img"); image.width = 240; image.height = 135; image.loading = "lazy"; image.alt = `Index ${segment.index} 首帧`; image.className = "cms-ad-preview-image";
+      const caption = document.createElement("figcaption"); caption.textContent = `Index ${segment.index} ｜ ${segment.duration}s ｜ ${segment.hash}`;
+      const url = document.createElement("code"); url.textContent = segment.url; url.className = "cms-ad-preview-url";
+      card.append(image, caption, url); cmsAdPreviewFramesEl.appendChild(card);
+      try {
+        const frame = await window.api.debugAdFirstFrame({ url: segment.url, tempRoot: config.tempRoot });
+        if (frame.ok) image.src = frame.imageUrl;
+        else { failed += 1; image.alt = `首帧失败：${frame.message || "未知错误"}`; }
+      } catch (error) { failed += 1; image.alt = `首帧失败：${error.message || error}`; }
+      completed += 1;
+      if (token === cmsAdPreviewToken) cmsAdPreviewStatusEl.textContent = `已获取 ${completed}/${response.segments.length} 张广告首帧${failed ? `，失败 ${failed} 张` : ""}`;
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(3, response.segments.length) }, loadNextFrame));
+}
+
 function closeCmsDownloadNameModal() {
+  resetCmsAdPreview();
   cmsDownloadNameModal.classList.add("hidden");
   cmsPendingDownloadDetail = null;
   cmsPendingDownloadEpisodes = [];
@@ -673,7 +731,9 @@ function openCmsDownloadNameModal(detail, episodes) {
   cmsPendingDownloadEpisodes = episodes;
   cmsDownloadShowNameInput.value = detail.name || "未命名影片";
   cmsDownloadNameStatusEl.textContent = `将加入 ${episodes.length} 个剧集。`;
+  resetCmsAdPreview();
   cmsDownloadNameModal.classList.remove("hidden");
+  loadCmsAdPreview(detail, episodes).catch((error) => { if (!cmsDownloadNameModal.classList.contains("hidden")) cmsAdPreviewStatusEl.textContent = `广告预览失败：${error.message || error}`; });
   cmsDownloadShowNameInput.focus();
   cmsDownloadShowNameInput.select();
 }
@@ -708,6 +768,7 @@ async function confirmCmsDownloadName() {
       useSystemProxy: config.useSystemProxy,
       adSegmentThreshold: config.adSegmentThreshold,
       adDurationSequence: config.adDurationSequence,
+      adIndexSequence: config.adIndexSequence,
       items: selectedEpisodes.map((episode) => ({
         episodeTitle: episode.name,
         url: episode.url
@@ -1255,6 +1316,16 @@ function renderCmsDetail(detail) {
       playCmsM3u8(episode);
     });
 
+    const debugAdBtn = document.createElement("button");
+    debugAdBtn.className = "btn small cms-detail-play-btn";
+    debugAdBtn.type = "button";
+    debugAdBtn.textContent = "调试去广告";
+    debugAdBtn.disabled = !/^https?:\/\//i.test(String(episode.url || "").trim());
+    debugAdBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (window.openAdDebugForUrl) window.openAdDebugForUrl(episode.url);
+    });
+
     const playSourceBtn = document.createElement("button");
     playSourceBtn.className = "btn small cms-detail-play-btn";
     playSourceBtn.type = "button";
@@ -1266,6 +1337,7 @@ function renderCmsDetail(detail) {
 
     playActions.appendChild(playM3u8Btn);
     playActions.appendChild(playSourceBtn);
+    playActions.appendChild(debugAdBtn);
 
     const meta = document.createElement("div");
     meta.className = "cms-detail-episode-meta";

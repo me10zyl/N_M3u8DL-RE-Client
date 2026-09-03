@@ -219,6 +219,10 @@
                 <span>启用片段个数阈值去广告</span>
               </label>
               <label class="field checkbox-field">
+                <input id="showAdPreviewOnCmsDownload" type="checkbox" />
+                <span>下载时自动展示去广告截图</span>
+              </label>
+              <label class="field checkbox-field">
                 <input id="useSystemProxy" type="checkbox" />
                 <span>使用系统代理（--use-system-proxy）</span>
               </label>
@@ -264,6 +268,11 @@
           <span>电视剧名称（将作为文件名、文件夹名）</span>
           <input id="cmsDownloadShowNameInput" placeholder="输入电视剧名称" />
         </label>
+        <section id="cmsAdPreview" class="cms-ad-preview hidden" aria-live="polite">
+          <h3>去广告预览</h3>
+          <p id="cmsAdPreviewStatus" class="status"></p>
+          <div id="cmsAdPreviewFrames" class="cms-ad-preview-frames"></div>
+        </section>
         <div class="actions">
           <button id="confirmCmsDownloadNameBtn" class="btn primary" type="button">确认加入</button>
           <button id="cancelCmsDownloadNameBtn" class="btn" type="button">取消</button>

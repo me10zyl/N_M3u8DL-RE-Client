@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("api", {
   debugAdFirstFrame: (payload) => ipcRenderer.invoke("ad-debug:first-frame", payload),
   autoDetectAds: (payload) => ipcRenderer.invoke("ad-debug:auto-detect", payload),
   applyAdDebugConfig: (payload) => ipcRenderer.invoke("ad-debug:apply-config", payload),
+  previewConfiguredAds: (payload) => ipcRenderer.invoke("ad-debug:configured-preview", payload),
   cmsListSources: () => ipcRenderer.invoke("cms:sources:list"),
   cmsListCategories: (payload) => ipcRenderer.invoke("cms:categories", payload),
   cmsSaveSource: (payload) => ipcRenderer.invoke("cms:sources:save", payload),
